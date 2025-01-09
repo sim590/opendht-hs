@@ -1,0 +1,16 @@
+# Vim files
+*.sw[p|o]
+*.un~
+
+# Cabal files
+builds
+dist
+dist-newstyle
+.ghc.environment.*
+
+# Binary files
+*.o
+*.obj
+*.exe
+*.out
+*.app
