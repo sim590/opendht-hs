@@ -34,5 +34,14 @@ library
 
     c-sources:          src/OpenDHT/Blob.c
 
+test-suite opendht-hs-test
+    import:             warnings
+    default-language:   Haskell2010
+    type:               exitcode-stdio-1.0
+    hs-source-dirs:     test
+    main-is:            Main.hs
+    build-depends:      base,
+                        opendht-hs
+
 --  vim: set sts=4 ts=4 sw=4 tw=120 et :
 
