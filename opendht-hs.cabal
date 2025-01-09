@@ -1,0 +1,38 @@
+cabal-version:   3.0
+name:            opendht-hs
+version:         0.1.0.0
+synopsis:        Haskell bindings for OpenDHT
+license:         GPL-3.0-or-later
+license-file:    LICENSE
+author:          Simon Désaulniers
+maintainer:      sim.desaulniers@gmail.com
+category:        Network
+build-type:      Simple
+extra-doc-files: CHANGELOG.md
+
+common warnings
+    ghc-options: -Wall -Wcompat -Wincomplete-record-updates
+                 -Wincomplete-uni-patterns -Wredundant-constraints
+
+common ffi
+    ghc-options: -fobject-code -O3
+
+library
+    import:             warnings
+    exposed-modules:    OpenDHT
+                        OpenDHT.Types
+                        OpenDHT.InfoHash
+                        OpenDHT.Blob
+    other-modules:      OpenDHT.Internal.InfoHash
+                        OpenDHT.Internal.Blob
+    build-depends:      base       ^>= 4.17.2.1,
+                        bytestring ^>= 0.11.5
+    build-tool-depends: c2hs:c2hs
+    pkgconfig-depends:  opendht-c
+    hs-source-dirs:     src
+    default-language:   Haskell2010
+
+    c-sources:          src/OpenDHT/Blob.c
+
+--  vim: set sts=4 ts=4 sw=4 tw=120 et :
+
