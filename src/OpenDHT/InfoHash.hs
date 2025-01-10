@@ -43,12 +43,12 @@ import OpenDHT.Internal.InfoHash
    It is at the heart of this library and is used as arguments for the get/put
    functions.
 -}
-newtype InfoHash = InfoHash { _infoHashPtr :: CInfoHash }
+newtype InfoHash = InfoHash { _infoHashPtr :: CInfoHashPtr }
 
-gettingInfoHash :: MonadIO f => (CInfoHash -> IO CInfoHash) -> f InfoHash
+gettingInfoHash :: MonadIO f => (CInfoHashPtr -> IO CInfoHashPtr) -> f InfoHash
 gettingInfoHash f = liftIO (with () f) <&> InfoHash
 
-foreign import ccall "dht_infohash_zero" dhtInfoHashZeroC :: CInfoHash -> IO ()
+foreign import ccall "dht_infohash_zero" dhtInfoHashZeroC :: CInfoHashPtr -> IO ()
 
 {-| Yields the empty InfoHash.
 
@@ -61,7 +61,7 @@ emptyInfoHash = gettingInfoHash zero
           dhtInfoHashZeroC ph
           return ph
 
-foreign import ccall "dht_infohash_random" dhtInfohashRandomC :: CInfoHash -> IO ()
+foreign import ccall "dht_infohash_random" dhtInfohashRandomC :: CInfoHashPtr -> IO ()
 
 {-| Computes a random hash.
 
@@ -74,7 +74,7 @@ randomInfoHash = gettingInfoHash random
           dhtInfohashRandomC ph
           return ph
 
-foreign import ccall "dht_infohash_from_hex" dhtInfohashFromHexC :: CInfoHash -> Ptr CChar -> IO ()
+foreign import ccall "dht_infohash_from_hex" dhtInfohashFromHexC :: CInfoHashPtr -> Ptr CChar -> IO ()
 
 {-| Create an InfoHash from a 40 character hexstring.
 
@@ -88,7 +88,7 @@ infoHashFromHex s = gettingInfoHash fromHex
             dhtInfohashFromHexC ph cstr
             return ph
 
-foreign import ccall "dht_infohash_get" dhtInfohashGetC :: CInfoHash -> Ptr CUChar -> CUInt -> IO ()
+foreign import ccall "dht_infohash_get" dhtInfohashGetC :: CInfoHashPtr -> Ptr CUChar -> CUInt -> IO ()
 
 {-| Computes the SHA-1 sum of a given ByteString and yield the resulting InfoHash.
 
@@ -103,7 +103,7 @@ infoHashFromBytes bs = gettingInfoHash fromBs
       dhtInfohashGetC ph a (fromIntegral $ BS.length bs)
       return ph
 
-foreign import ccall "dht_infohash_get_from_string" dhtInfohashGetFromStringC :: CInfoHash -> Ptr CChar -> IO ()
+foreign import ccall "dht_infohash_get_from_string" dhtInfohashGetFromStringC :: CInfoHashPtr -> Ptr CChar -> IO ()
 
 {-| Computes the SHA-1 sum of a given String and yield the resulting InfoHash.
 
@@ -118,7 +118,7 @@ infoHashFromString s = gettingInfoHash fromStr
         dhtInfohashGetFromStringC ph cstr
         return ph
 
-foreign import ccall "dht_infohash_is_zero" dhtInfohashIsZeroC :: CInfoHash -> IO CBool
+foreign import ccall "dht_infohash_is_zero" dhtInfohashIsZeroC :: CInfoHashPtr -> IO CBool
 
 {-| Tells whether infohash is the empty InfoHash.
 
@@ -134,7 +134,7 @@ foreign import ccall "dht_infohash_is_zero" dhtInfohashIsZeroC :: CInfoHash -> I
 isZero :: InfoHash -> Dht Bool
 isZero h = liftIO (dhtInfohashIsZeroC (_infoHashPtr h) <&> toBool)
 
-foreign import ccall "dht_infohash_print" dhtInfoHashPrintC :: CInfoHash -> IO (Ptr CChar)
+foreign import ccall "dht_infohash_print" dhtInfoHashPrintC :: CInfoHashPtr -> IO (Ptr CChar)
 
 {-| Get the string representation of an InfoHash.
 

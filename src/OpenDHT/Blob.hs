@@ -32,9 +32,9 @@ import OpenDHT.Internal.Blob
 
   In fact, in OpenDHT, "Blob" is a typdef to "std::vector<uint8_t>".
 -}
-newtype Blob = Blob { _blobCData :: CBlob }
+newtype Blob = Blob { _blobCData :: CBlobPtr }
 
-foreign import ccall "dht_blob_get_data_view" dhtBlobGetDataViewC :: Ptr DataView -> CBlob -> IO ()
+foreign import ccall "dht_blob_get_data_view" dhtBlobGetDataViewC :: Ptr DataView -> CBlobPtr -> IO ()
 
 {-| Get the string of bytes under the Blob type.
 -}
@@ -47,7 +47,7 @@ viewBlob b = liftIO $ do
   free dvPtr
   return $ BS.pack $ map (\ (CUChar w) -> w) cuchars
 
-foreign import ccall "dht_blob_delete" dhtBlobDeleteC :: CBlob -> IO ()
+foreign import ccall "dht_blob_delete" dhtBlobDeleteC :: CBlobPtr -> IO ()
 
 {-| Delete a blob for which OpenDHT holds the pointer to.
 -}

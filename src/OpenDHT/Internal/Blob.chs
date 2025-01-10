@@ -18,7 +18,7 @@ import Foreign.Storable
 
 {-| Type synonym for C-bindings. Not meant to be used by the library user.
 -}
-type CBlob = Ptr ()
+type CBlobPtr = Ptr ()
 
 {-| Internal intermediary type used to retrieve values under Blobs.
 -}
