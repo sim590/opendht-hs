@@ -13,10 +13,22 @@ module OpenDHT.Internal.InfoHash where
 import Foreign.Ptr
 import Foreign.C.Types
 import Foreign.C.String
+import Foreign.Storable
+
+#include <opendht/opendht_c.h>
 
 {-| Type synonym for C-bindings. Not meant to be used by the library user.
 -}
 type CInfoHashPtr = Ptr ()
+
+-- struct OPENDHT_C_PUBLIC dht_infohash { uint8_t d[HASH_LEN]; };
+newtype CInfoHash = CInfoHash { _infoHashData :: Ptr CUChar }
+
+instance Storable CInfoHash where
+    sizeOf _    = {# sizeof dht_infohash  #}
+    alignment _ = {# alignof dht_infohash #}
+    poke        = poke
+    peek p      = CInfoHash <$> {# get dht_infohash->d #} p
 
 foreign import ccall "dht_infohash_from_hex" dhtInfohashFromHexC :: CInfoHashPtr -> Ptr CChar -> IO ()
 
