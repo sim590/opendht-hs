@@ -23,10 +23,11 @@ library
                         OpenDHT.Types
                         OpenDHT.InfoHash
                         OpenDHT.Blob
+                        OpenDHT.Value
     other-modules:      OpenDHT.Internal.InfoHash
                         OpenDHT.Internal.Blob
-    build-depends:      base       ^>= 4.17.2.1,
-                        bytestring ^>= 0.11.5
+    build-depends:      base       >= 4.17.2.1,
+                        bytestring >= 0.11.5
     build-tool-depends: c2hs:c2hs
     pkgconfig-depends:  opendht-c
     hs-source-dirs:     src
