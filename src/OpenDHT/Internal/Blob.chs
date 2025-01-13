@@ -41,7 +41,7 @@ instance Storable DataView where
     peek p      = DataView <$> {# get dht_data_view->data #} p
                            <*> {# get dht_data_view->size #} p
 
-foreign import ccall "dht_blob_get_data_view" dhtBlobGetDataViewC :: Ptr DataView -> CBlobPtr -> IO ()
+foreign import ccall "wr_dht_blob_get_data" dhtBlobGetDataViewC :: Ptr DataView -> CBlobPtr -> IO ()
 
 {-| Get the string of bytes under the Blob type.
 -}
