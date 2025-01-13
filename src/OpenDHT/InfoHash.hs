@@ -126,22 +126,5 @@ isZero :: InfoHash -> Dht Bool
 isZero h = liftIO $ with () (withCString (_infoHashString h) . iszero)
   where iszero ph cstr = toBool <$> (dhtInfohashFromHexC ph cstr >> dhtInfohashIsZeroC ph)
 
-foreign import ccall "dht_infohash_print" dhtInfoHashPrintC :: CInfoHashPtr -> IO (Ptr CChar)
-
-{-| Get the string representation of an InfoHash.
-
-   For example:
-
-   > unDht $ do
-   >   h <- infoHashFromHex "fae0f12f4f2f5eaaadceff21987ff1f121ff478f"
-   >   liftIO $ print $ show h
-
-   would yield the following string:
-
-   > "fae0f12f4f2f5eaaadceff21987ff1f121ff478f"
--}
-infoHashToString :: CInfoHashPtr -> IO String
-infoHashToString h = dhtInfoHashPrintC h >>= peekCString
-
 --  vim: set sts=2 ts=2 sw=2 tw=120 et :
 

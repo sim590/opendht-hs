@@ -35,11 +35,16 @@ data DataView = DataView { _data      :: Ptr CUChar
                          }
 
 instance Storable DataView where
-    sizeOf _    = {# sizeof dht_data_view #}
+    sizeOf _    = {# sizeof  dht_data_view #}
     alignment _ = {# alignof dht_data_view #}
     poke        = poke
     peek p      = DataView <$> {# get dht_data_view->data #} p
                            <*> {# get dht_data_view->size #} p
+
+bytesFromDataView :: DataView -> IO BS.ByteString
+bytesFromDataView dv = do
+  cuchars <- peekArray (fromIntegral $ _dataSize dv) (_data dv)
+  return $ BS.pack $ map (\ (CUChar w) -> w) cuchars
 
 foreign import ccall "wr_dht_blob_get_data" dhtBlobGetDataViewC :: Ptr DataView -> CBlobPtr -> IO ()
 
@@ -49,10 +54,9 @@ viewBlob :: CBlobPtr -> Dht BS.ByteString
 viewBlob b = liftIO $ do
   dvPtr <- malloc
   dhtBlobGetDataViewC dvPtr b
-  dv      <- peek dvPtr
-  cuchars <- peekArray (fromIntegral $ _dataSize dv) (_data dv)
+  dv <- peek dvPtr
   free dvPtr
-  return $ BS.pack $ map (\ (CUChar w) -> w) cuchars
+  bytesFromDataView dv
 
 foreign import ccall "dht_blob_delete" dhtBlobDeleteC :: CBlobPtr -> IO ()
 

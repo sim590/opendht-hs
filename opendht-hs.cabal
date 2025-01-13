@@ -20,8 +20,12 @@ library
                         OpenDHT.Types
                         OpenDHT.InfoHash
                         OpenDHT.Blob
+                        OpenDHT.Value
+                        OpenDHT.PublicKey
     other-modules:      OpenDHT.Internal.InfoHash
                         OpenDHT.Internal.Blob
+                        OpenDHT.Internal.Value
+                        OpenDHT.Internal.PublicKey
     build-depends:      base       ^>= 4.17.2.1,
                         bytestring ^>= 0.11.5
     build-tool-depends: c2hs:c2hs
@@ -30,6 +34,7 @@ library
     default-language:   Haskell2010
 
     c-sources:          src/OpenDHT/Blob.c
+                        src/OpenDHT/Internal/Value.c
 
 --  vim: set sts=4 ts=4 sw=4 tw=120 et :
 
