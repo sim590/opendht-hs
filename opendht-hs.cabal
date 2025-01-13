@@ -14,9 +14,6 @@ common warnings
     ghc-options: -Wall -Wcompat -Wincomplete-record-updates
                  -Wincomplete-uni-patterns -Wredundant-constraints
 
-common ffi
-    ghc-options: -fobject-code -O3
-
 library
     import:             warnings
     exposed-modules:    OpenDHT
