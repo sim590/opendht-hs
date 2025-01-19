@@ -12,7 +12,6 @@ typedef struct {
 wr_dht_node_config* to_wr_dht_node_config(wr_dht_node_config* dst, dht_node_config* const src);
 dht_node_config*    from_wr_dht_node_config(dht_node_config* dst, wr_dht_node_config* const src);
 
-
 // wrapper around dht_secure_config
 typedef struct {
     dht_node_config* node_config;
