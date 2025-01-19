@@ -14,6 +14,8 @@ import Foreign.Ptr
 import Foreign.C.Types
 import Foreign.C.String
 import Foreign.Storable
+import Foreign.Marshal.Array
+import Foreign.Marshal.Utils
 
 #include <opendht/opendht_c.h>
 
@@ -29,6 +31,9 @@ instance Storable CInfoHash where
     alignment _                = {# alignof dht_infohash #}
     poke p (CInfoHash cPtr)    = {# set dht_infohash->d  #} p cPtr
     peek p                     = CInfoHash <$> {# get dht_infohash->d #} p
+
+hashHexLen :: Int
+hashHexLen = 40
 
 foreign import ccall "dht_infohash_from_hex" dhtInfohashFromHexC :: CInfoHashPtr -> Ptr CChar -> IO ()
 
@@ -48,6 +53,12 @@ foreign import ccall "dht_infohash_print" dhtInfoHashPrintC :: CInfoHashPtr -> I
 -}
 infoHashToString :: CInfoHashPtr -> IO String
 infoHashToString h = dhtInfoHashPrintC h >>= peekCString
+
+emptyInfoHashWordArray :: [CUChar]
+emptyInfoHashWordArray = replicate hashHexLen (castCharToCUChar '0')
+
+withCInfohash :: (Ptr CInfoHash -> IO b) -> IO b
+withCInfohash f = withArray emptyInfoHashWordArray $ \ cucharPtr -> with (CInfoHash cucharPtr) f
 
 --  vim: set sts=2 ts=2 sw=2 tw=120 et :
 

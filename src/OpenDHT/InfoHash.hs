@@ -43,15 +43,6 @@ import OpenDHT.Internal.InfoHash
 -}
 newtype InfoHash = InfoHash { _infoHashString :: String }
 
-hashHexLen :: Int
-hashHexLen = 40
-
-emptyInfoHashWordArray :: [CUChar]
-emptyInfoHashWordArray = replicate hashHexLen (castCharToCUChar '0')
-
-withCInfohash :: (Ptr CInfoHash -> IO b) -> IO b
-withCInfohash f = withArray emptyInfoHashWordArray $ \ cucharPtr -> with (CInfoHash cucharPtr) f
-
 instance Show InfoHash where
   show = _infoHashString
 
