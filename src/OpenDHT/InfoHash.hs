@@ -43,11 +43,20 @@ import OpenDHT.Internal.InfoHash
 -}
 newtype InfoHash = InfoHash { _infoHashString :: String }
 
+hashHexLen :: Int
+hashHexLen = 40
+
+emptyInfoHashWordArray :: [CUChar]
+emptyInfoHashWordArray = replicate hashHexLen (castCharToCUChar '0')
+
+withCInfohash :: (Ptr CInfoHash -> IO b) -> IO b
+withCInfohash f = withArray emptyInfoHashWordArray $ \ cucharPtr -> with (CInfoHash cucharPtr) f
+
 instance Show InfoHash where
   show = _infoHashString
 
 gettingInfoHash :: MonadIO f => (CInfoHashPtr -> IO String) -> f InfoHash
-gettingInfoHash = (InfoHash <$>) . liftIO . with ()
+gettingInfoHash = (InfoHash <$>) . liftIO . withCInfohash
 
 foreign import ccall "dht_infohash_zero" dhtInfoHashZeroC :: CInfoHashPtr -> IO ()
 
@@ -105,7 +114,7 @@ foreign import ccall "dht_infohash_get_from_string" dhtInfohashGetFromStringC ::
   > b6589fc6ab0dc82cf12099d1c2d40ab994e8410c
 -}
 infoHashFromString :: String -> Dht InfoHash
-infoHashFromString s = gettingInfoHash (withCString s .  fromStr)
+infoHashFromString s = gettingInfoHash (withCString s . fromStr)
   where
     fromStr ph cstr = dhtInfohashGetFromStringC ph cstr >> infoHashToString ph
 
@@ -123,7 +132,7 @@ foreign import ccall "dht_infohash_is_zero" dhtInfohashIsZeroC :: CInfoHashPtr -
   > True
 -}
 isZero :: InfoHash -> Dht Bool
-isZero h = liftIO $ with () (withCString (_infoHashString h) . iszero)
+isZero h = liftIO $ withCInfohash (withCString (_infoHashString h) . iszero)
   where iszero ph cstr = toBool <$> (dhtInfohashFromHexC ph cstr >> dhtInfohashIsZeroC ph)
 
 --  vim: set sts=2 ts=2 sw=2 tw=120 et :

@@ -14,7 +14,7 @@ import Foreign.Ptr
 import Foreign.C.Types
 import Foreign.Storable
 
-import OpenDHT.Internal.InfoHash (CInfoHash)
+import OpenDHT.Internal.InfoHash
 
 #include <opendht/opendht_c.h>
 #include "DhtRunner.h"
@@ -53,13 +53,11 @@ data CDhtNodeConfig = CDhtNodeConfig { _nodeIdC          :: CInfoHashPtr
                                      , _persistPathC     :: Ptr CChar
                                      }
 
-{# pointer *dht_infohash as CInfoHashPtr -> CInfoHash #}
-
 instance Storable CDhtNodeConfig where
     sizeOf _    = {# sizeof wr_dht_node_config  #}
     alignment _ = {# alignof wr_dht_node_config #}
     poke        = poke
-    peek p      = CDhtNodeConfig <$> {# get wr_dht_node_config.node_id           #} p
+    peek p      = CDhtNodeConfig <$> peekByteOff p 0
                                  <*> {# get wr_dht_node_config->network          #} p
                                  <*> {# get wr_dht_node_config->is_bootstrap     #} p
                                  <*> {# get wr_dht_node_config->maintain_storage #} p
