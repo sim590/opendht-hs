@@ -27,7 +27,7 @@ newtype CInfoHash = CInfoHash { _infoHashData :: Ptr CUChar }
 instance Storable CInfoHash where
     sizeOf _                   = {# sizeof dht_infohash  #}
     alignment _                = {# alignof dht_infohash #}
-    poke p (CInfoHash cPtr)    = {# set dht_infohash->d #} p cPtr
+    poke p (CInfoHash cPtr)    = {# set dht_infohash->d  #} p cPtr
     peek p                     = CInfoHash <$> {# get dht_infohash->d #} p
 
 foreign import ccall "dht_infohash_from_hex" dhtInfohashFromHexC :: CInfoHashPtr -> Ptr CChar -> IO ()
