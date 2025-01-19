@@ -25,10 +25,21 @@ import Foreign.Marshal.Array
 import OpenDHT.Types
 import OpenDHT.Internal.Blob
 import OpenDHT.InfoHash
+import OpenDHT.PublicKey
 import OpenDHT.Internal.InfoHash
 import OpenDHT.Internal.PublicKey
 
 type CValuePtr = Ptr ()
+
+data Value = StoredValue { _valueData        :: BS.ByteString
+                         , _valueId          :: Int
+                         , _valueOwner       :: PublicKey
+                         , _valueRecipientId :: InfoHash
+                         , _valueUserType    :: String
+                         }
+           | InputValue  { _valueData        :: BS.ByteString
+                         , _valueUserType    :: String
+                         }
 
 foreign import ccall "dht_value_new" dhtValueNewC :: Ptr CUChar -> CULong -> IO CValuePtr
 
@@ -105,6 +116,14 @@ foreign import ccall "dht_value_set_user_type" dhtValueSetUserTypeC  :: CValuePt
 -}
 setValueUserType :: CValuePtr -> String -> Dht ()
 setValueUserType vptr s = liftIO $ withCString s $ \ cstr -> dhtValueSetUserTypeC vptr cstr
+
+-- TODO: ajouter le owner... (PublicKey)
+storedValueFromCValuePtr :: CValuePtr -> Dht Value
+storedValueFromCValuePtr vPtr = StoredValue <$> getValueData        vPtr
+                                            <*> getValueId          vPtr
+                                            <*> return PublicKey
+                                            <*> getValueRecipientId vPtr
+                                            <*> getValueUserType    vPtr
 
 --  vim: set sts=2 ts=2 sw=2 tw=120 et :
 

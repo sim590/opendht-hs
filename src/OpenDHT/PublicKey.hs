@@ -1,6 +1,6 @@
 
-module OpenDHT.PublicKey ( PublicKey
-                 ) where
+module OpenDHT.PublicKey ( PublicKey (..)
+                         ) where
 
 -- TODO
 data PublicKey = PublicKey

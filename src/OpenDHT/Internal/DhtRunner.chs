@@ -14,10 +14,17 @@ import Foreign.Ptr
 import Foreign.C.Types
 import Foreign.Storable
 
+import OpenDHT.Internal.Value
 import OpenDHT.Internal.InfoHash
 
 #include <opendht/opendht_c.h>
 #include "DhtRunner.h"
+
+type CGetCallback a = CValuePtr -> Ptr a -> IO CBool
+foreign import ccall safe "wrapper" wrapGetCallback :: CGetCallback a-> IO (FunPtr (CGetCallback a))
+
+type CDoneCallback a = CBool -> Ptr a -> IO ()
+foreign import ccall safe "wrapper" wrapDoneCallback :: CDoneCallback a-> IO (FunPtr (CDoneCallback a))
 
 type CDhtPrivatekey  = ()
 type CDhtCertificate = ()
@@ -132,5 +139,5 @@ instance Storable CDhtRunnerConfig where
                                    <*> {# get wr_dht_runner_config.client_identity  #} p
                                    <*> {# get wr_dht_runner_config->log             #} p
 
--- --  vim: set sts=2 ts=2 sw=2 tw=120 et :
+--  vim: set sts=2 ts=2 sw=2 tw=120 et :
 

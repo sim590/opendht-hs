@@ -16,22 +16,35 @@ module OpenDHT.DhtRunner ( DhtRunner
                          , initialize
                          , run
                          , runDhtRunnerM
+                         , bootstrap
                          ) where
 
 import qualified Data.ByteString as BS
 
-import Control.Monad.State
+import Control.Monad.State ( MonadState
+                           , MonadIO
+                           , StateT
+                           , liftIO
+                           , void
+                           )
+import qualified Control.Monad.State as ST
+import Control.Concurrent.MVar
 
 import Foreign.Ptr
+import Foreign.Storable
 import Foreign.C.Types
+import Foreign.C.String
+import Foreign.Marshal.Utils
 
 import OpenDHT.Types
 import OpenDHT.InfoHash
+import OpenDHT.Value
+import OpenDHT.Internal.Value
 import OpenDHT.Internal.DhtRunner
+import OpenDHT.Internal.InfoHash
 
-type DoneCallBack = Bool -> IO ()
-type CDoneCallBack = CBool -> Ptr () -> IO ()
-foreign import ccall safe "wrapper" wrapDoneCallBack :: CDoneCallBack -> IO (FunPtr CDoneCallBack)
+type GetCallback  a = Value -> a -> IO Bool
+type DoneCallback a = Bool -> a -> IO ()
 
 type CDhtRunnerPtr = Ptr ()
 newtype DhtRunner  = DhtRunner { dhtRunnerPtr :: CDhtRunnerPtr }
@@ -68,12 +81,12 @@ data DhtRunnerConfig = DhtRunnerConfig { _dhtConfig      :: DhtSecureConfig
 newtype DhtRunnerM a = DhtRunnerM { unwrapDhtRunnerM :: StateT DhtRunner Dht a }
   deriving (Functor, Applicative, Monad, MonadIO, MonadState DhtRunner)
 
-foreign import ccall "dht_runner_new" dhtRunnerNewC :: CDhtRunnerPtr
+foreign import ccall "dht_runner_new" dhtRunnerNewC :: IO CDhtRunnerPtr
 
 {-| Initialize an OpenDHT node.
 -}
 initialize :: Dht DhtRunner
-initialize = return $ DhtRunner dhtRunnerNewC
+initialize = DhtRunner <$> liftIO dhtRunnerNewC
 
 foreign import ccall "dht_runner_run" dhtRunnerRunC :: CDhtRunnerPtr -> CInt -> IO CInt
 
@@ -82,14 +95,44 @@ foreign import ccall "dht_runner_run" dhtRunnerRunC :: CDhtRunnerPtr -> CInt -> 
 run :: Int -- ^ The port on which to run the DHT node.
     -> DhtRunnerM ()
 run port = do
-  dhtrunner <- get
+  dhtrunner <- ST.get
   void $ liftIO $ dhtRunnerRunC (dhtRunnerPtr dhtrunner) (fromIntegral port)
 
 foreign import ccall "dht_runner_bootstrap" dhtRunnerBootstrapC :: CDhtRunnerPtr -> Ptr CChar -> Ptr CChar -> IO ()
 
--- TODO
+{-| Initialize the connection to the OpenDHT network before doing any operation.
+-}
 bootstrap :: String -> String -> DhtRunnerM ()
-bootstrap addr port = undefined
+bootstrap addr port = do
+  dhtrunner <- ST.get
+  liftIO $ withCString addr $ \ addrCPtr ->
+           withCString port $ \ portCPtr -> dhtRunnerBootstrapC (dhtRunnerPtr dhtrunner) addrCPtr portCPtr
+
+foreign import ccall "dht_runner_get"
+  dhtRunnerGetC :: CDhtRunnerPtr -> CInfoHashPtr  -> FunPtr (CGetCallback a) -> FunPtr (CDoneCallback a) -> Ptr a -> IO ()
+
+{-| Get a value pointed by a given hash on the DHT.
+-}
+get :: Storable userdata
+    => InfoHash              -- ^ The hash for which to get data at.
+    -> GetCallback userdata  -- ^ The callback invoked for all values retrieved on the DHT for the given hash.
+    -> DoneCallback userdata -- ^ The callback invoked when OpenDHT has completed the get request.
+    -> userdata              -- ^ Some user data to be passed to callbacks.
+    -> DhtRunnerM ()
+get h gcb dcb userdata = ST.get >>= liftIO . doGet
+  where
+    gcbC vPtr userdataPtr = do
+      udata <- peek userdataPtr
+      v     <- unDht $ storedValueFromCValuePtr vPtr
+      fromBool <$> gcb v udata
+    dcbC successC userdataPtr = do
+      udata <- peek userdataPtr
+      dcb (toBool successC) udata
+    doGet dhtrunner = withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
+      dhtInfohashFromHexC hPtr hStrPtr
+      gcbCWrapped <- wrapGetCallback gcbC
+      dcbCWrapped <- wrapDoneCallback dcbC
+      dhtRunnerGetC (dhtRunnerPtr dhtrunner) hPtr gcbCWrapped dcbCWrapped userdataPtr
 
 -- TODO: initialiser DhtRunner
 runDhtRunnerM :: DhtRunnerM a -> IO a
