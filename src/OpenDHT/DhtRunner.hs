@@ -17,6 +17,7 @@ module OpenDHT.DhtRunner ( DhtRunner
                          , run
                          , bootstrap
                          , get
+                         , put
                          ) where
 
 import qualified Data.ByteString as BS
@@ -144,15 +145,17 @@ get h gcb dcb userdata = ask >>= \ dhtrunner -> liftIO $ do
 foreign import ccall "dht_runner_put"
   dhtRunnerPutC :: CDhtRunnerPtr -> CInfoHashPtr -> CValuePtr -> FunPtr (CDoneCallback a) -> Ptr a -> CBool -> IO ()
 
+{-| Put data on the DHT for a given hash.
+-}
 put :: Storable a
-    => Value          -- ^ The value to put on the DHT.
-    -> InfoHash       -- ^ The hash under which to store the value.
+    => InfoHash       -- ^ The hash under which to store the value.
+    -> Value          -- ^ The value to put on the DHT.
     -> DoneCallback a -- ^ The callback to invoke when the request is completed (or has failed).
     -> a              -- ^ User data to pass to the callback.
     -> Bool           -- ^ Whether the value should be reannounced automatically after it has expired (after 10 minutes)
     -> DhtRunnerM  Dht ()
-put (StoredValue {}) _ _ _ _                           = error "DhtRunner.put needs to be fed an InputValue!"
-put (InputValue vbs usertype) h dcb userdata permanent = ask >>= \ dhtrunner -> liftIO $ do
+put _ (StoredValue {}) _ _ _                           = error "DhtRunner.put needs to be fed an InputValue!"
+put h (InputValue vbs usertype) dcb userdata permanent = ask >>= \ dhtrunner -> liftIO $ do
   withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
     dhtInfohashFromHexC hPtr hStrPtr
     dcbCWrapped <- wrapDoneCallbackC $ fromDoneCallback dcb
