@@ -2,6 +2,7 @@
 module Main where
 
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Internal as BSI
 
 import Control.Monad
@@ -38,6 +39,11 @@ main = do
     DhtRunner.bootstrap "bootstrap.ring.cx" "4222"
     h <- lift randomInfoHash
     liftIO $ putStrLn $ "Mon hash: " <> show h
+    let v = InputValue { _valueData     = BSC.pack "toto"
+                       , _valueUserType = "mytype"
+                       }
+    DhtRunner.put h v (doneCb mv) () False
+    liftIO $ takeMVar mv
     DhtRunner.get h getCb (doneCb mv) ()
     liftIO $ takeMVar mv
 
