@@ -23,8 +23,14 @@ import OpenDHT.Internal.InfoHash
 type CGetCallback a = CValuePtr -> Ptr a -> IO CBool
 foreign import ccall safe "wrapper" wrapGetCallbackC :: CGetCallback a-> IO (FunPtr (CGetCallback a))
 
+type CValueCallback a = CValuePtr -> CBool -> Ptr a -> IO CBool
+foreign import ccall safe "wrapper" wrapValueCallbackC :: CValueCallback a -> IO (FunPtr (CValueCallback a))
+
 type CDoneCallback a = CBool -> Ptr a -> IO ()
 foreign import ccall safe "wrapper" wrapDoneCallbackC :: CDoneCallback a-> IO (FunPtr (CDoneCallback a))
+
+type CShutdownCallback a = Ptr a -> IO ()
+foreign import ccall safe "wrapper" wrapShutdownCallbackC :: CShutdownCallback a -> IO (FunPtr (CShutdownCallback a))
 
 type CDhtPrivatekey  = ()
 type CDhtCertificate = ()
