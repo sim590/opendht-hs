@@ -38,11 +38,12 @@ data CDhtIdentity = CDhtIdentity { _privatekeyC  :: Ptr CDhtPrivatekey
                                  }
 
 instance Storable CDhtIdentity where
-    sizeOf _    = {# sizeof dht_identity  #}
-    alignment _ = {# alignof dht_identity #}
-    poke        = poke
-    peek p      = CDhtIdentity <$> {# get dht_identity->privatekey  #} p
-                               <*> {# get dht_identity->certificate #} p
+    sizeOf _        = {# sizeof dht_identity  #}
+    alignment _     = {# alignof dht_identity #}
+    poke p identity = {# set dht_identity->privatekey  #} p (_privatekeyC identity)
+                   >> {# set dht_identity->certificate #} p (_certificateC identity)
+    peek p          = CDhtIdentity <$> {# get dht_identity->privatekey  #} p
+                                   <*> {# get dht_identity->certificate #} p
 
 -- from: DhtRunner.h
 -- --
@@ -63,7 +64,11 @@ data CDhtNodeConfig = CDhtNodeConfig { _nodeIdC          :: CInfoHashPtr
 instance Storable CDhtNodeConfig where
     sizeOf _    = {# sizeof wr_dht_node_config  #}
     alignment _ = {# alignof wr_dht_node_config #}
-    poke        = poke
+    poke p conf = pokeByteOff p 0 (_nodeIdC conf)                 -- node_id
+               >> {# set wr_dht_node_config->network          #} p (_networkC conf)
+               >> {# set wr_dht_node_config->is_bootstrap     #} p (_isBootstrapC conf)
+               >> {# set wr_dht_node_config->maintain_storage #} p (_maintainStorageC conf)
+               >> {# set wr_dht_node_config->persist_path     #} p (_persistPathC conf)
     peek p      = CDhtNodeConfig <$> peekByteOff p 0
                                  <*> {# get wr_dht_node_config->network          #} p
                                  <*> {# get wr_dht_node_config->is_bootstrap     #} p
@@ -84,11 +89,12 @@ data CDhtSecureConfig = CDhtSecureConfig { _nodeConfigC :: CDhtNodeConfigPtr
 {# pointer *dht_identity    as CDhtIdentityPtr   -> CDhtIdentity   #}
 
 instance Storable CDhtSecureConfig where
-    sizeOf _    = {# sizeof wr_dht_secure_config  #}
-    alignment _ = {# alignof wr_dht_secure_config #}
-    poke        = poke
-    peek p      = CDhtSecureConfig <$> {# get wr_dht_secure_config.node_config #} p
-                                   <*> {# get wr_dht_secure_config.id          #} p
+    sizeOf _     = {# sizeof wr_dht_secure_config  #}
+    alignment _  = {# alignof wr_dht_secure_config #}
+    poke p sconf = {# set wr_dht_secure_config->node_config #} p (_nodeConfigC sconf)
+                >> {# set wr_dht_secure_config->id          #} p (_idC sconf)
+    peek p       = CDhtSecureConfig <$> {# get wr_dht_secure_config->node_config #} p
+                                    <*> {# get wr_dht_secure_config->id          #} p
 
 -- from: DhtRunner.h
 -- --
@@ -123,10 +129,21 @@ data CDhtRunnerConfig = CDhtRunnerConfig { _dhtConfigC      :: CDhtSecureConfigP
 {# pointer *dht_secure_config as CDhtSecureConfigPtr -> CDhtSecureConfig #}
 
 instance Storable CDhtRunnerConfig where
-    sizeOf _    = {# sizeof wr_dht_runner_config #}
+    sizeOf _    = {# sizeof wr_dht_runner_config  #}
     alignment _ = {# alignof wr_dht_runner_config #}
-    poke        = poke
-    peek p      = CDhtRunnerConfig <$> {# get wr_dht_runner_config.dht_config       #} p
+    poke p conf = {# set wr_dht_runner_config->dht_config      #} p (_dhtConfigC conf)
+               >> {# set wr_dht_runner_config->threaded        #} p (_threadedC conf)
+               >> {# set wr_dht_runner_config->proxy_server    #} p (_proxyServerC conf)
+               >> {# set wr_dht_runner_config->push_node_id    #} p (_pushNodeIdC conf)
+               >> {# set wr_dht_runner_config->push_token      #} p (_pushTokenC conf)
+               >> {# set wr_dht_runner_config->push_topic      #} p (_pushTopicC conf)
+               >> {# set wr_dht_runner_config->push_platform   #} p (_pushPlatformC conf)
+               >> {# set wr_dht_runner_config->peer_discovery  #} p (_peerDiscoveryC conf)
+               >> {# set wr_dht_runner_config->peer_publish    #} p (_peerPublishC conf)
+               >> {# set wr_dht_runner_config->server_ca       #} p (_serverCaC conf)
+               >> {# set wr_dht_runner_config->client_identity #} p (_clientIdentityC conf)
+               >> {# set wr_dht_runner_config->log             #} p (_logC conf)
+    peek p      = CDhtRunnerConfig <$> {# get wr_dht_runner_config->dht_config      #} p
                                    <*> {# get wr_dht_runner_config->threaded        #} p
                                    <*> {# get wr_dht_runner_config->proxy_server    #} p
                                    <*> {# get wr_dht_runner_config->push_node_id    #} p
