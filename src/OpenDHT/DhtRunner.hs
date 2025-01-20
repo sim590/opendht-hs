@@ -17,12 +17,15 @@ module OpenDHT.DhtRunner ( DhtRunner
                          , DhtRunnerM
                          , runDhtRunnerM
                          , GetCallback
+                         , ValueCallback
                          , DoneCallback
+                         , ShutdownCallback
                          , run
                          , isRunning
                          , bootstrap
                          , get
                          , put
+                         , listen
                          ) where
 
 import qualified Data.ByteString as BS
@@ -51,6 +54,16 @@ type GetCallback  a = Value -- ^ A value found for the asked hash.
                    -> a     -- ^ User data passed from the initial call to `get`.
                    -> IO Bool
 
+{-| Callback invoked whenever a `Value` is retrieved on the DHT during a Liste
+   (`listen`) request. This callback shall be called once when a value is found
+   and once when this same value has expired on the network. Finally, it returns a
+   boolean indicating whether to stop the Listen request or not.
+-}
+type ValueCallback a = Value -- ^ A value found for the asked hash.
+                    -> Bool  -- ^ Whether the value is expired or not.
+                    -> a     -- ^ User data passed from the initial call to `listen`.
+                    -> IO Bool
+
 {-| The generic callback invoked for all asynchronous operations when those
    terminate.
 -}
@@ -58,8 +71,15 @@ type DoneCallback a = Bool -- ^ A boolean indicating whether the operation was s
                    -> a    -- ^ User data passed from the initial call to the function.
                    -> IO ()
 
+{-| A callback invoked before the Dhtnode is shutdown.
+-}
+type ShutdownCallback a = a -- ^ User data passed from the initial call to the function.
+                       -> IO ()
+
 type CDhtRunnerPtr = Ptr ()
+type COpTokenPtr   = Ptr ()
 newtype DhtRunner  = DhtRunner { dhtRunnerPtr :: CDhtRunnerPtr }
+newtype OpToken    = OpToken { opTokenValue :: COpTokenPtr }
 
 data DhtIdentity = DhtIdentity { _privatekey  :: BS.ByteString
                                , _certificate :: BS.ByteString
@@ -101,18 +121,29 @@ newtype DhtRunnerM m a = DhtRunnerM { unwrapDhtRunnerM :: ReaderT DhtRunner m a 
 instance MonadTrans DhtRunnerM where
   lift = DhtRunnerM . lift
 
-foreign import ccall "dht_runner_new" dhtRunnerNewC :: IO CDhtRunnerPtr
-
 fromGetCallBack :: Storable t => GetCallback t -> CGetCallback t
 fromGetCallBack gcb vPtr userdataPtr = do
   udata <- peek userdataPtr
   v     <- unDht $ storedValueFromCValuePtr vPtr
   fromBool <$> gcb v udata
 
+fromValueCallBack :: Storable t => ValueCallback t -> CValueCallback t
+fromValueCallBack vcb vPtr expired userdataPtr = do
+  udata <- peek userdataPtr
+  v     <- unDht $ storedValueFromCValuePtr vPtr
+  fromBool <$> vcb v (toBool expired) udata
+
 fromDoneCallback :: Storable t => DoneCallback t -> CDoneCallback t
 fromDoneCallback dcb successC userdataPtr = do
   udata <- peek userdataPtr
   dcb (toBool successC) udata
+
+fromShutdownCallback :: Storable t => ShutdownCallback t -> CShutdownCallback t
+fromShutdownCallback scb userdataPtr = do
+  udata <- peek userdataPtr
+  scb udata
+
+foreign import ccall "dht_runner_new" dhtRunnerNewC :: IO CDhtRunnerPtr
 
 {-| Initialize an OpenDHT node.
 -}
@@ -201,7 +232,7 @@ put :: Storable userdata
     -> DoneCallback userdata -- ^ The callback to invoke when the request is completed (or has failed).
     -> userdata              -- ^ User data to pass to the callback.
     -> Bool                  -- ^ Whether the value should be reannounced automatically after it has expired (after 10 minutes)
-    -> DhtRunnerM  Dht ()
+    -> DhtRunnerM Dht ()
 put _ (StoredValue {}) _ _ _                           = error "DhtRunner.put needs to be fed an InputValue!"
 put h (InputValue vbs usertype) dcb userdata permanent = ask >>= \ dhtrunner -> liftIO $ do
   withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
@@ -210,6 +241,28 @@ put h (InputValue vbs usertype) dcb userdata permanent = ask >>= \ dhtrunner -> 
     vPtr <- unDht $ valueFromBytes vbs
     unDht $ setValueUserType vPtr usertype
     dhtRunnerPutC (dhtRunnerPtr dhtrunner) hPtr vPtr dcbCWrapped userdataPtr (fromBool permanent)
+
+foreign import ccall "dht_runner_listen"
+  dhtRunnerListenC :: CDhtRunnerPtr -> CInfoHashPtr -> FunPtr (CValueCallback a) -> FunPtr (CShutdownCallback a) -> Ptr a -> IO (Ptr ())
+
+{-| Initiate a Listen operation for a given hash. The callback will be
+   invoked once for every value found and once also when that same value expires
+   on the DHT. While the Listen operation is not cancelled (or the node
+   shutdown), it goes on. Threfore, values subsequently published will be
+   received.
+-}
+listen :: Storable userdata
+       => InfoHash                  -- ^ The hash indicating where to listen to.
+       -> ValueCallback userdata    -- ^ The callback to invoke when a value is found or has expired.
+       -> ShutdownCallback userdata -- ^ The callback to invoke before the OpenDHT node shuts down.
+       -> userdata                  -- ^ User data to pass to the callback.
+       -> DhtRunnerM Dht OpToken
+listen h vcb scb userdata = ask >>= \ dhtrunner -> liftIO $ do
+  withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
+    dhtInfohashFromHexC hPtr hStrPtr
+    vcbCWrapped <- wrapValueCallbackC $ fromValueCallBack vcb
+    scbCWrapped <- wrapShutdownCallbackC $ fromShutdownCallback scb
+    OpToken <$> dhtRunnerListenC (dhtRunnerPtr dhtrunner) hPtr vcbCWrapped scbCWrapped userdataPtr
 
 makeDhtRunnerConfig :: DhtRunnerConfig -> Dht CDhtRunnerConfig
 makeDhtRunnerConfig dhtConf = undefined
