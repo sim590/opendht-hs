@@ -13,10 +13,10 @@
 
 module OpenDHT.DhtRunner ( DhtRunner
                          , DhtRunnerM (..)
-                         , initialize
-                         , run
                          , runDhtRunnerM
+                         , run
                          , bootstrap
+                         , get
                          ) where
 
 import qualified Data.ByteString as BS
@@ -26,9 +26,9 @@ import Control.Monad.State ( MonadState
                            , StateT
                            , liftIO
                            , void
+                           , evalStateT
                            )
 import qualified Control.Monad.State as ST
-import Control.Concurrent.MVar
 
 import Foreign.Ptr
 import Foreign.Storable
@@ -88,6 +88,13 @@ foreign import ccall "dht_runner_new" dhtRunnerNewC :: IO CDhtRunnerPtr
 initialize :: Dht DhtRunner
 initialize = DhtRunner <$> liftIO dhtRunnerNewC
 
+foreign import ccall "dht_runner_delete" dhtRunnerDeleteC :: CDhtRunnerPtr -> IO ()
+
+{-| Delete the underlying DhtRunner C pointer.
+-}
+delete :: DhtRunner -> Dht ()
+delete = liftIO . dhtRunnerDeleteC . dhtRunnerPtr
+
 foreign import ccall "dht_runner_run" dhtRunnerRunC :: CDhtRunnerPtr -> CInt -> IO CInt
 
 {-| Run the OpenDHT node on a given port.
@@ -100,7 +107,7 @@ run port = do
 
 foreign import ccall "dht_runner_bootstrap" dhtRunnerBootstrapC :: CDhtRunnerPtr -> Ptr CChar -> Ptr CChar -> IO ()
 
-{-| Initialize the connection to the OpenDHT network before doing any operation.
+{-| Connect to the OpenDHT network before doing any operation.
 -}
 bootstrap :: String -> String -> DhtRunnerM ()
 bootstrap addr port = do
@@ -134,10 +141,11 @@ get h gcb dcb userdata = ST.get >>= liftIO . doGet
       dcbCWrapped <- wrapDoneCallback dcbC
       dhtRunnerGetC (dhtRunnerPtr dhtrunner) hPtr gcbCWrapped dcbCWrapped userdataPtr
 
--- TODO: initialiser DhtRunner
-runDhtRunnerM :: DhtRunnerM a -> IO a
-runDhtRunnerM runnerAction = undefined
--- runDhtRunnerM runnerAction = unDht $ evalStateT (unwrapDhtRunnerM runnerAction) (DhtRunner _)
+runDhtRunnerM :: DhtRunnerM () -> IO ()
+runDhtRunnerM runnerAction = unDht $ do
+  dhtrunner <- initialize
+  evalStateT (unwrapDhtRunnerM runnerAction) dhtrunner
+  delete dhtrunner
 
 makeDhtRunnerConfig :: DhtRunnerConfig -> Dht CDhtRunnerConfig
 makeDhtRunnerConfig dhtConf = undefined
