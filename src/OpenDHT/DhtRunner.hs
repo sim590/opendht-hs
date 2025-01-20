@@ -21,6 +21,7 @@ module OpenDHT.DhtRunner ( DhtRunner
 
 import qualified Data.ByteString as BS
 
+import Control.Monad.Trans.Class
 import Control.Monad.State ( MonadState
                            , MonadIO
                            , StateT
@@ -78,8 +79,11 @@ data DhtRunnerConfig = DhtRunnerConfig { _dhtConfig      :: DhtSecureConfig
                                        , _log            :: Bool
                                        }
 
-newtype DhtRunnerM a = DhtRunnerM { unwrapDhtRunnerM :: StateT DhtRunner Dht a }
+newtype DhtRunnerM m a = DhtRunnerM { unwrapDhtRunnerM :: StateT DhtRunner m a }
   deriving (Functor, Applicative, Monad, MonadIO, MonadState DhtRunner)
+
+instance MonadTrans DhtRunnerM where
+  lift = DhtRunnerM . lift
 
 foreign import ccall "dht_runner_new" dhtRunnerNewC :: IO CDhtRunnerPtr
 
@@ -100,7 +104,7 @@ foreign import ccall "dht_runner_run" dhtRunnerRunC :: CDhtRunnerPtr -> CInt -> 
 {-| Run the OpenDHT node on a given port.
 -}
 run :: Int -- ^ The port on which to run the DHT node.
-    -> DhtRunnerM ()
+    -> DhtRunnerM Dht ()
 run port = do
   dhtrunner <- ST.get
   void $ liftIO $ dhtRunnerRunC (dhtRunnerPtr dhtrunner) (fromIntegral port)
@@ -109,7 +113,7 @@ foreign import ccall "dht_runner_bootstrap" dhtRunnerBootstrapC :: CDhtRunnerPtr
 
 {-| Connect to the OpenDHT network before doing any operation.
 -}
-bootstrap :: String -> String -> DhtRunnerM ()
+bootstrap :: String -> String -> DhtRunnerM Dht ()
 bootstrap addr port = do
   dhtrunner <- ST.get
   liftIO $ withCString addr $ \ addrCPtr ->
@@ -125,7 +129,7 @@ get :: Storable userdata
     -> GetCallback userdata  -- ^ The callback invoked for all values retrieved on the DHT for the given hash.
     -> DoneCallback userdata -- ^ The callback invoked when OpenDHT has completed the get request.
     -> userdata              -- ^ Some user data to be passed to callbacks.
-    -> DhtRunnerM ()
+    -> DhtRunnerM Dht ()
 get h gcb dcb userdata = ST.get >>= liftIO . doGet
   where
     gcbC vPtr userdataPtr = do
@@ -141,7 +145,7 @@ get h gcb dcb userdata = ST.get >>= liftIO . doGet
       dcbCWrapped <- wrapDoneCallback dcbC
       dhtRunnerGetC (dhtRunnerPtr dhtrunner) hPtr gcbCWrapped dcbCWrapped userdataPtr
 
-runDhtRunnerM :: DhtRunnerM () -> IO ()
+runDhtRunnerM :: DhtRunnerM Dht () -> IO ()
 runDhtRunnerM runnerAction = unDht $ do
   dhtrunner <- initialize
   evalStateT (unwrapDhtRunnerM runnerAction) dhtrunner
