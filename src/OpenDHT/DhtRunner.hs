@@ -141,6 +141,24 @@ get h gcb dcb userdata = ask >>= \ dhtrunner -> liftIO $ do
     dcbCWrapped <- wrapDoneCallbackC $ fromDoneCallback dcb
     dhtRunnerGetC (dhtRunnerPtr dhtrunner) hPtr gcbCWrapped dcbCWrapped userdataPtr
 
+foreign import ccall "dht_runner_put"
+  dhtRunnerPutC :: CDhtRunnerPtr -> CInfoHashPtr -> CValuePtr -> FunPtr (CDoneCallback a) -> Ptr a -> CBool -> IO ()
+
+put :: Storable a
+    => Value          -- ^ The value to put on the DHT.
+    -> InfoHash       -- ^ The hash under which to store the value.
+    -> DoneCallback a -- ^ The callback to invoke when the request is completed (or has failed).
+    -> a              -- ^ User data to pass to the callback.
+    -> Bool           -- ^ Whether the value should be reannounced automatically after it has expired (after 10 minutes)
+    -> DhtRunnerM  Dht ()
+put (StoredValue {}) _ _ _ _                           = error "DhtRunner.put needs to be fed an InputValue!"
+put (InputValue vbs usertype) h dcb userdata permanent = ask >>= \ dhtrunner -> liftIO $ do
+  withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
+    dhtInfohashFromHexC hPtr hStrPtr
+    dcbCWrapped <- wrapDoneCallbackC $ fromDoneCallback dcb
+    vPtr <- unDht $ valueFromBytes vbs
+    unDht $ setValueUserType vPtr usertype
+    dhtRunnerPutC (dhtRunnerPtr dhtrunner) hPtr vPtr dcbCWrapped userdataPtr (fromBool permanent)
 
 runDhtRunnerM :: DhtRunnerM Dht () -> IO ()
 runDhtRunnerM runnerAction = unDht $ do
