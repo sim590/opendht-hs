@@ -16,7 +16,10 @@
 module OpenDHT.DhtRunner ( DhtRunner
                          , DhtRunnerM
                          , runDhtRunnerM
+                         , GetCallback
+                         , DoneCallback
                          , run
+                         , isRunning
                          , bootstrap
                          , get
                          , put
@@ -40,8 +43,20 @@ import OpenDHT.Internal.Value
 import OpenDHT.Internal.DhtRunner
 import OpenDHT.Internal.InfoHash
 
-type GetCallback  a = Value -> a -> IO Bool
-type DoneCallback a = Bool -> a -> IO ()
+{-| Callback invoked whenever a `Value` is retrieved on the DHT during a
+   Get (`get`) request. This callback shall return a boolean indicating whether to
+   stop the Get request or not.
+-}
+type GetCallback  a = Value -- ^ A value found for the asked hash.
+                   -> a     -- ^ User data passed from the initial call to `get`.
+                   -> IO Bool
+
+{-| The generic callback invoked for all asynchronous operations when those
+   terminate.
+-}
+type DoneCallback a = Bool -- ^ A boolean indicating whether the operation was successful or not.
+                   -> a    -- ^ User data passed from the initial call to the function.
+                   -> IO ()
 
 type CDhtRunnerPtr = Ptr ()
 newtype DhtRunner  = DhtRunner { dhtRunnerPtr :: CDhtRunnerPtr }
@@ -75,6 +90,11 @@ data DhtRunnerConfig = DhtRunnerConfig { _dhtConfig      :: DhtSecureConfig
                                        , _log            :: Bool
                                        }
 
+{-| This type wraps all function calls to OpenDHT. It is a transformer wrapping
+   `ReaderT` and some other monad (usually `Dht`).
+
+   This type should be used in conjunction with `runDhtRunnerM`.
+-}
 newtype DhtRunnerM m a = DhtRunnerM { unwrapDhtRunnerM :: ReaderT DhtRunner m a }
   deriving (Functor, Applicative, Monad, MonadIO, MonadReader DhtRunner)
 
@@ -106,6 +126,22 @@ foreign import ccall "dht_runner_delete" dhtRunnerDeleteC :: CDhtRunnerPtr -> IO
 delete :: DhtRunner -> Dht ()
 delete = liftIO . dhtRunnerDeleteC . dhtRunnerPtr
 
+{-| Starts a DhtRunner session. This initializes the underlying OpenDHT node and
+   takes care of freeing it before this function terminates.
+
+   DhtRunner's function calls don't block the thread they're running on.
+   Therefore, the user should take care of writing appropriate concurrency code
+   for waiting on the underlying node's callback invocation before letting this
+   function terminate. In general, the programmer should not let this function
+   terminate while DHT operations are still susceptible to take place by the
+   application.
+-}
+runDhtRunnerM :: DhtRunnerM Dht () -> IO ()
+runDhtRunnerM runnerAction = unDht $ do
+  dhtrunner <- initialize
+  runReaderT (unwrapDhtRunnerM runnerAction) dhtrunner
+  delete dhtrunner
+
 foreign import ccall "dht_runner_run" dhtRunnerRunC :: CDhtRunnerPtr -> CInt -> IO CInt
 
 {-| Run the OpenDHT node on a given port.
@@ -116,11 +152,21 @@ run port = do
   dhtrunner <- ask
   void $ liftIO $ dhtRunnerRunC (dhtRunnerPtr dhtrunner) (fromIntegral port)
 
+foreign import ccall "dht_runner_is_running" dhtRunnerIsRunningC :: CDhtRunnerPtr -> IO CBool
+
+{-| Indicates whether the underlying node is running. This should yield `True`
+   after calling `run`.
+-}
+isRunning :: DhtRunnerM Dht Bool
+isRunning = ask >>= liftIO . (toBool <$>) . dhtRunnerIsRunningC . dhtRunnerPtr
+
 foreign import ccall "dht_runner_bootstrap" dhtRunnerBootstrapC :: CDhtRunnerPtr -> Ptr CChar -> Ptr CChar -> IO ()
 
 {-| Connect to the OpenDHT network before doing any operation.
 -}
-bootstrap :: String -> String -> DhtRunnerM Dht ()
+bootstrap :: String -- ^ The hostname (or IP address) used to bootstrap the connection to the network.
+          -> String -- ^ The remote bootstrapping node port to use to connect.
+          -> DhtRunnerM Dht ()
 bootstrap addr port = do
   dhtrunner <- ask
   liftIO $ withCString addr $ \ addrCPtr ->
@@ -164,12 +210,6 @@ put h (InputValue vbs usertype) dcb userdata permanent = ask >>= \ dhtrunner -> 
     vPtr <- unDht $ valueFromBytes vbs
     unDht $ setValueUserType vPtr usertype
     dhtRunnerPutC (dhtRunnerPtr dhtrunner) hPtr vPtr dcbCWrapped userdataPtr (fromBool permanent)
-
-runDhtRunnerM :: DhtRunnerM Dht () -> IO ()
-runDhtRunnerM runnerAction = unDht $ do
-  dhtrunner <- initialize
-  runReaderT (unwrapDhtRunnerM runnerAction) dhtrunner
-  delete dhtrunner
 
 makeDhtRunnerConfig :: DhtRunnerConfig -> Dht CDhtRunnerConfig
 makeDhtRunnerConfig dhtConf = undefined
