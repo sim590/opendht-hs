@@ -7,7 +7,9 @@
 
   Maintainer  : sim.desaulniers@gmail.com
 
-  This encapsulates functions and datatypes for manipulating an OpenDHT node.
+  This encapsulates functions and datatypes for manipulating an OpenDHT node. In
+  OpenDHT, a node is used through the class DhtRunner. This module exposes this
+  class' functions.
 -}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
@@ -147,12 +149,12 @@ foreign import ccall "dht_runner_put"
 
 {-| Put data on the DHT for a given hash.
 -}
-put :: Storable a
-    => InfoHash       -- ^ The hash under which to store the value.
-    -> Value          -- ^ The value to put on the DHT.
-    -> DoneCallback a -- ^ The callback to invoke when the request is completed (or has failed).
-    -> a              -- ^ User data to pass to the callback.
-    -> Bool           -- ^ Whether the value should be reannounced automatically after it has expired (after 10 minutes)
+put :: Storable userdata
+    => InfoHash              -- ^ The hash under which to store the value.
+    -> Value                 -- ^ The value to put on the DHT.
+    -> DoneCallback userdata -- ^ The callback to invoke when the request is completed (or has failed).
+    -> userdata              -- ^ User data to pass to the callback.
+    -> Bool                  -- ^ Whether the value should be reannounced automatically after it has expired (after 10 minutes)
     -> DhtRunnerM  Dht ()
 put _ (StoredValue {}) _ _ _                           = error "DhtRunner.put needs to be fed an InputValue!"
 put h (InputValue vbs usertype) dcb userdata permanent = ask >>= \ dhtrunner -> liftIO $ do
