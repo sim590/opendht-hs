@@ -80,6 +80,17 @@ instance MonadTrans DhtRunnerM where
 
 foreign import ccall "dht_runner_new" dhtRunnerNewC :: IO CDhtRunnerPtr
 
+fromGetCallBack :: Storable t => GetCallback t -> CGetCallback t
+fromGetCallBack gcb vPtr userdataPtr = do
+  udata <- peek userdataPtr
+  v     <- unDht $ storedValueFromCValuePtr vPtr
+  fromBool <$> gcb v udata
+
+fromDoneCallback :: Storable t => DoneCallback t -> CDoneCallback t
+fromDoneCallback dcb successC userdataPtr = do
+  udata <- peek userdataPtr
+  dcb (toBool successC) udata
+
 {-| Initialize an OpenDHT node.
 -}
 initialize :: Dht DhtRunner
@@ -123,20 +134,13 @@ get :: Storable userdata
     -> DoneCallback userdata -- ^ The callback invoked when OpenDHT has completed the get request.
     -> userdata              -- ^ Some user data to be passed to callbacks.
     -> DhtRunnerM Dht ()
-get h gcb dcb userdata = ask >>= liftIO . doGet
-  where
-    gcbC vPtr userdataPtr = do
-      udata <- peek userdataPtr
-      v     <- unDht $ storedValueFromCValuePtr vPtr
-      fromBool <$> gcb v udata
-    dcbC successC userdataPtr = do
-      udata <- peek userdataPtr
-      dcb (toBool successC) udata
-    doGet dhtrunner = withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
-      dhtInfohashFromHexC hPtr hStrPtr
-      gcbCWrapped <- wrapGetCallback gcbC
-      dcbCWrapped <- wrapDoneCallback dcbC
-      dhtRunnerGetC (dhtRunnerPtr dhtrunner) hPtr gcbCWrapped dcbCWrapped userdataPtr
+get h gcb dcb userdata = ask >>= \ dhtrunner -> liftIO $ do
+  withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
+    dhtInfohashFromHexC hPtr hStrPtr
+    gcbCWrapped <- wrapGetCallbackC $ fromGetCallBack gcb
+    dcbCWrapped <- wrapDoneCallbackC $ fromDoneCallback dcb
+    dhtRunnerGetC (dhtRunnerPtr dhtrunner) hPtr gcbCWrapped dcbCWrapped userdataPtr
+
 
 runDhtRunnerM :: DhtRunnerM Dht () -> IO ()
 runDhtRunnerM runnerAction = unDht $ do

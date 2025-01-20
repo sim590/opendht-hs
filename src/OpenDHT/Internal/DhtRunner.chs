@@ -21,10 +21,10 @@ import OpenDHT.Internal.InfoHash
 #include "DhtRunner.h"
 
 type CGetCallback a = CValuePtr -> Ptr a -> IO CBool
-foreign import ccall safe "wrapper" wrapGetCallback :: CGetCallback a-> IO (FunPtr (CGetCallback a))
+foreign import ccall safe "wrapper" wrapGetCallbackC :: CGetCallback a-> IO (FunPtr (CGetCallback a))
 
 type CDoneCallback a = CBool -> Ptr a -> IO ()
-foreign import ccall safe "wrapper" wrapDoneCallback :: CDoneCallback a-> IO (FunPtr (CDoneCallback a))
+foreign import ccall safe "wrapper" wrapDoneCallbackC :: CDoneCallback a-> IO (FunPtr (CDoneCallback a))
 
 type CDhtPrivatekey  = ()
 type CDhtCertificate = ()
