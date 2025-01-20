@@ -19,7 +19,10 @@ getCb (InputValue _ _) _              = undefined
 getCb (StoredValue d i _ rId utype) _ = liftIO cb >> return True
   where cb = do
           putStrLn "Valeur retrouvée!"
-          putStrLn $ ">> data: " <> take 50 (map BSI.w2c (BS.unpack d))
+          putStrLn $ ">> data: "         <> take 50 (map BSI.w2c (BS.unpack d))
+          putStrLn $ ">> value id: "     <> show i
+          putStrLn $ ">> recipient id: " <> show rId
+          putStrLn $ ">> user type: "    <> show utype
 
 doneCb :: MVar () -> Bool -> () -> IO ()
 doneCb mv success _ = do
@@ -28,7 +31,6 @@ doneCb mv success _ = do
   putMVar mv ()
 
 main :: IO ()
--- main = putStrLn "toto"
 main = do
   mv <- newEmptyMVar
   runDhtRunnerM $ do
