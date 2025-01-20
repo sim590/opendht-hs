@@ -12,7 +12,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module OpenDHT.DhtRunner ( DhtRunner
-                         , DhtRunnerM (..)
+                         , DhtRunnerM
                          , runDhtRunnerM
                          , run
                          , bootstrap
