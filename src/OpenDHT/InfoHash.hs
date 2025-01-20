@@ -10,7 +10,7 @@
   This module exposes the different functions used to manipulate an OpenDHT
   `InfoHash`. An `InfoHash` encapsulates the result of the computation of the
   SHA-1 function. It's possible to derive such data from either a string, bytes
-  or or by picking from random.
+  or by picking from random.
 -}
 
 module OpenDHT.InfoHash ( InfoHash
