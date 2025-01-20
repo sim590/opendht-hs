@@ -22,14 +22,7 @@ module OpenDHT.DhtRunner ( DhtRunner
 import qualified Data.ByteString as BS
 
 import Control.Monad.Trans.Class
-import Control.Monad.State ( MonadState
-                           , MonadIO
-                           , StateT
-                           , liftIO
-                           , void
-                           , evalStateT
-                           )
-import qualified Control.Monad.State as ST
+import Control.Monad.Reader
 
 import Foreign.Ptr
 import Foreign.Storable
@@ -79,8 +72,8 @@ data DhtRunnerConfig = DhtRunnerConfig { _dhtConfig      :: DhtSecureConfig
                                        , _log            :: Bool
                                        }
 
-newtype DhtRunnerM m a = DhtRunnerM { unwrapDhtRunnerM :: StateT DhtRunner m a }
-  deriving (Functor, Applicative, Monad, MonadIO, MonadState DhtRunner)
+newtype DhtRunnerM m a = DhtRunnerM { unwrapDhtRunnerM :: ReaderT DhtRunner m a }
+  deriving (Functor, Applicative, Monad, MonadIO, MonadReader DhtRunner)
 
 instance MonadTrans DhtRunnerM where
   lift = DhtRunnerM . lift
@@ -106,7 +99,7 @@ foreign import ccall "dht_runner_run" dhtRunnerRunC :: CDhtRunnerPtr -> CInt -> 
 run :: Int -- ^ The port on which to run the DHT node.
     -> DhtRunnerM Dht ()
 run port = do
-  dhtrunner <- ST.get
+  dhtrunner <- ask
   void $ liftIO $ dhtRunnerRunC (dhtRunnerPtr dhtrunner) (fromIntegral port)
 
 foreign import ccall "dht_runner_bootstrap" dhtRunnerBootstrapC :: CDhtRunnerPtr -> Ptr CChar -> Ptr CChar -> IO ()
@@ -115,7 +108,7 @@ foreign import ccall "dht_runner_bootstrap" dhtRunnerBootstrapC :: CDhtRunnerPtr
 -}
 bootstrap :: String -> String -> DhtRunnerM Dht ()
 bootstrap addr port = do
-  dhtrunner <- ST.get
+  dhtrunner <- ask
   liftIO $ withCString addr $ \ addrCPtr ->
            withCString port $ \ portCPtr -> dhtRunnerBootstrapC (dhtRunnerPtr dhtrunner) addrCPtr portCPtr
 
@@ -130,7 +123,7 @@ get :: Storable userdata
     -> DoneCallback userdata -- ^ The callback invoked when OpenDHT has completed the get request.
     -> userdata              -- ^ Some user data to be passed to callbacks.
     -> DhtRunnerM Dht ()
-get h gcb dcb userdata = ST.get >>= liftIO . doGet
+get h gcb dcb userdata = ask >>= liftIO . doGet
   where
     gcbC vPtr userdataPtr = do
       udata <- peek userdataPtr
@@ -148,7 +141,7 @@ get h gcb dcb userdata = ST.get >>= liftIO . doGet
 runDhtRunnerM :: DhtRunnerM Dht () -> IO ()
 runDhtRunnerM runnerAction = unDht $ do
   dhtrunner <- initialize
-  evalStateT (unwrapDhtRunnerM runnerAction) dhtrunner
+  runReaderT (unwrapDhtRunnerM runnerAction) dhtrunner
   delete dhtrunner
 
 makeDhtRunnerConfig :: DhtRunnerConfig -> Dht CDhtRunnerConfig
