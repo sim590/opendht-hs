@@ -10,6 +10,7 @@
 
 module OpenDHT.Internal.Value where
 
+import Data.Word
 import qualified Data.ByteString as BS
 
 import Control.Monad
@@ -32,7 +33,7 @@ import OpenDHT.Internal.PublicKey
 type CValuePtr = Ptr ()
 
 data Value = StoredValue { _valueData        :: BS.ByteString
-                         , _valueId          :: Int
+                         , _valueId          :: Word64
                          , _valueOwner       :: PublicKey
                          , _valueRecipientId :: InfoHash
                          , _valueUserType    :: String
@@ -81,7 +82,7 @@ foreign import ccall "dht_value_get_id" dhtValueGetIdC :: CValuePtr -> IO CULong
 
 {-| Get the id of an OpenDHT value. This field is a metadata.
 -}
-getValueId :: CValuePtr -> Dht Int
+getValueId :: CValuePtr -> Dht Word64
 getValueId = liftIO . (dhtValueGetIdC >=> return . fromIntegral)
 
 foreign import ccall "dht_value_get_owner" dhtValueGetOwnerC :: CValuePtr -> IO CPublicKeyPtr

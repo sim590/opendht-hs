@@ -30,11 +30,13 @@ module OpenDHT.DhtRunner ( DhtRunner
                          , bootstrap
                          , get
                          , put
+                         , cancelPut
                          , listen
                          , cancelListen
                          , shutdown
                          ) where
 
+import Data.Word
 import qualified Data.List as List
 import Data.Map ( Map
                 )
@@ -286,6 +288,20 @@ put h (InputValue vbs usertype) dcb userdata permanent = use dhtRunner >>= \ dht
 
 foreign import ccall "dht_runner_listen"
   dhtRunnerListenC :: CDhtRunnerPtr -> CInfoHashPtr -> FunPtr (CValueCallback a) -> FunPtr (CShutdownCallback a) -> Ptr a -> IO (Ptr ())
+
+foreign import ccall "dht_runner_cancel_put" dhtRunnerCancelPutC :: CDhtRunnerPtr -> CInfoHashPtr -> CULLong -> IO ()
+
+{-| Cancel a Put request.
+
+  This function is useful for cancelling a "permanent" Put request.
+-}
+cancelPut :: InfoHash -- ^ The hash for which the value was first put.
+          -> Word64   -- ^ The value ID.
+          -> DhtRunnerM Dht ()
+cancelPut h vid = use dhtRunner >>= \ dhtrunner -> liftIO $ do
+  withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> do
+    dhtInfohashFromHexC hPtr hStrPtr
+    dhtRunnerCancelPutC (_dhtRunnerPtr dhtrunner) hPtr (CULLong vid)
 
 {-| Initiate a Listen operation for a given hash.
 
