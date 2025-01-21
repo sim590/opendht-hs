@@ -11,11 +11,17 @@
   OpenDHT, a node is used through the class DhtRunner. This module exposes this
   class' functions.
 -}
+
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module OpenDHT.DhtRunner ( DhtRunner
                          , DhtRunnerM
                          , runDhtRunnerM
+                         , DhtRunnerState (..)
+                         , dhtRunner
+                         , listenTokens
+                         , OpToken
                          , GetCallback
                          , ValueCallback
                          , DoneCallback
@@ -26,12 +32,26 @@ module OpenDHT.DhtRunner ( DhtRunner
                          , get
                          , put
                          , listen
+                         , cancelListen
                          ) where
 
+import qualified Data.List as List
+import Data.Map ( Map
+                )
+import qualified Data.Map as Map
 import qualified Data.ByteString as BS
 
+import Control.Lens
+
+import Control.Monad
+import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Class
-import Control.Monad.Reader
+import Control.Monad.IO.Class
+import Control.Monad.State ( StateT
+                           , MonadState
+                           , execStateT
+                           )
+import qualified Control.Monad.State as ST
 
 import Foreign.Ptr
 import Foreign.Storable
@@ -78,12 +98,27 @@ type ShutdownCallback a = a -- ^ User data passed from the initial call to the f
 
 type CDhtRunnerPtr = Ptr ()
 type COpTokenPtr   = Ptr ()
-newtype DhtRunner  = DhtRunner { dhtRunnerPtr :: CDhtRunnerPtr }
-newtype OpToken    = OpToken { opTokenValue :: COpTokenPtr }
+
+newtype DhtRunner = DhtRunner { _dhtRunnerPtr :: CDhtRunnerPtr }
+
+{-| A token used to track Listen requests.
+-}
+newtype OpToken = OpToken { _opTokenPtr :: COpTokenPtr }
+  deriving Eq
+
+{-|
+-}
+data DhtRunnerState = DhtRunnerState { _dhtRunner    :: DhtRunner              -- ^ The DhtRunner.
+                                     , _listenTokens :: Map InfoHash [OpToken] -- ^ Map tracking the different Listen requests for
+                                                                               -- every calls to `listen` according to their
+                                                                               -- respective hash argument.
+                                     }
+makeLenses ''DhtRunnerState
 
 data DhtIdentity = DhtIdentity { _privatekey  :: BS.ByteString
                                , _certificate :: BS.ByteString
                                }
+makeLenses ''DhtIdentity
 
 data DhtNodeConfig = DhtNodeConfig { _nodeId          :: InfoHash
                                    , _network         :: Int
@@ -91,10 +126,12 @@ data DhtNodeConfig = DhtNodeConfig { _nodeId          :: InfoHash
                                    , _maintainStorage :: Bool
                                    , _persistPath     :: String
                                    }
+makeLenses ''DhtNodeConfig
 
 data DhtSecureConfig = DhtSecureConfig { _nodeConfig :: DhtNodeConfig
                                        , _id         :: DhtIdentity
                                        }
+makeLenses ''DhtSecureConfig
 
 data DhtRunnerConfig = DhtRunnerConfig { _dhtConfig      :: DhtSecureConfig
                                        , _threaded       :: Bool
@@ -109,14 +146,15 @@ data DhtRunnerConfig = DhtRunnerConfig { _dhtConfig      :: DhtSecureConfig
                                        , _clientIdentity :: DhtIdentity
                                        , _log            :: Bool
                                        }
+makeLenses ''DhtRunnerConfig
 
 {-| This type wraps all function calls to OpenDHT. It is a transformer wrapping
-   `ReaderT` and some other monad (usually `Dht`).
+   `StateT` and some other monad (usually `Dht`).
 
    This type should be used in conjunction with `runDhtRunnerM`.
 -}
-newtype DhtRunnerM m a = DhtRunnerM { unwrapDhtRunnerM :: ReaderT DhtRunner m a }
-  deriving (Functor, Applicative, Monad, MonadIO, MonadReader DhtRunner)
+newtype DhtRunnerM m a = DhtRunnerM { unwrapDhtRunnerM :: StateT DhtRunnerState m a }
+  deriving (Functor, Applicative, Monad, MonadIO, MonadState DhtRunnerState)
 
 instance MonadTrans DhtRunnerM where
   lift = DhtRunnerM . lift
@@ -155,7 +193,12 @@ foreign import ccall "dht_runner_delete" dhtRunnerDeleteC :: CDhtRunnerPtr -> IO
 {-| Delete the underlying DhtRunner C pointer.
 -}
 delete :: DhtRunner -> Dht ()
-delete = liftIO . dhtRunnerDeleteC . dhtRunnerPtr
+delete = liftIO . dhtRunnerDeleteC . _dhtRunnerPtr
+
+foreign import ccall "dht_op_token_delete" dhtOpTokenDeleteC :: COpTokenPtr -> IO ()
+
+deleteOpToken :: OpToken -> Dht ()
+deleteOpToken = liftIO . dhtOpTokenDeleteC . _opTokenPtr
 
 {-| Starts a DhtRunner session. This initializes the underlying OpenDHT node and
    takes care of freeing it before this function terminates.
@@ -170,8 +213,9 @@ delete = liftIO . dhtRunnerDeleteC . dhtRunnerPtr
 runDhtRunnerM :: DhtRunnerM Dht () -> IO ()
 runDhtRunnerM runnerAction = unDht $ do
   dhtrunner <- initialize
-  runReaderT (unwrapDhtRunnerM runnerAction) dhtrunner
+  s <- execStateT (unwrapDhtRunnerM runnerAction) (DhtRunnerState dhtrunner Map.empty)
   delete dhtrunner
+  forM_ (Map.toList (s^.listenTokens) ^. traverse . _2) deleteOpToken
 
 foreign import ccall "dht_runner_run" dhtRunnerRunC :: CDhtRunnerPtr -> CInt -> IO CInt
 
@@ -180,8 +224,8 @@ foreign import ccall "dht_runner_run" dhtRunnerRunC :: CDhtRunnerPtr -> CInt -> 
 run :: Int -- ^ The port on which to run the DHT node.
     -> DhtRunnerM Dht ()
 run port = do
-  dhtrunner <- ask
-  void $ liftIO $ dhtRunnerRunC (dhtRunnerPtr dhtrunner) (fromIntegral port)
+  dhtrunner <- use dhtRunner
+  void $ liftIO $ dhtRunnerRunC (_dhtRunnerPtr dhtrunner) (fromIntegral port)
 
 foreign import ccall "dht_runner_is_running" dhtRunnerIsRunningC :: CDhtRunnerPtr -> IO CBool
 
@@ -189,7 +233,7 @@ foreign import ccall "dht_runner_is_running" dhtRunnerIsRunningC :: CDhtRunnerPt
    after calling `run`.
 -}
 isRunning :: DhtRunnerM Dht Bool
-isRunning = ask >>= liftIO . (toBool <$>) . dhtRunnerIsRunningC . dhtRunnerPtr
+isRunning = use dhtRunner >>= liftIO . (toBool <$>) . dhtRunnerIsRunningC . _dhtRunnerPtr
 
 foreign import ccall "dht_runner_bootstrap" dhtRunnerBootstrapC :: CDhtRunnerPtr -> Ptr CChar -> Ptr CChar -> IO ()
 
@@ -199,9 +243,9 @@ bootstrap :: String -- ^ The hostname (or IP address) used to bootstrap the conn
           -> String -- ^ The remote bootstrapping node port to use to connect.
           -> DhtRunnerM Dht ()
 bootstrap addr port = do
-  dhtrunner <- ask
+  dhtrunner <- use dhtRunner
   liftIO $ withCString addr $ \ addrCPtr ->
-           withCString port $ \ portCPtr -> dhtRunnerBootstrapC (dhtRunnerPtr dhtrunner) addrCPtr portCPtr
+           withCString port $ \ portCPtr -> dhtRunnerBootstrapC (_dhtRunnerPtr dhtrunner) addrCPtr portCPtr
 
 foreign import ccall "dht_runner_get"
   dhtRunnerGetC :: CDhtRunnerPtr -> CInfoHashPtr  -> FunPtr (CGetCallback a) -> FunPtr (CDoneCallback a) -> Ptr a -> IO ()
@@ -214,12 +258,12 @@ get :: Storable userdata
     -> DoneCallback userdata -- ^ The callback invoked when OpenDHT has completed the get request.
     -> userdata              -- ^ Some user data to be passed to callbacks.
     -> DhtRunnerM Dht ()
-get h gcb dcb userdata = ask >>= \ dhtrunner -> liftIO $ do
+get h gcb dcb userdata = use dhtRunner >>= \ dhtrunner -> liftIO $ do
   withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
     dhtInfohashFromHexC hPtr hStrPtr
     gcbCWrapped <- wrapGetCallbackC $ fromGetCallBack gcb
     dcbCWrapped <- wrapDoneCallbackC $ fromDoneCallback dcb
-    dhtRunnerGetC (dhtRunnerPtr dhtrunner) hPtr gcbCWrapped dcbCWrapped userdataPtr
+    dhtRunnerGetC (_dhtRunnerPtr dhtrunner) hPtr gcbCWrapped dcbCWrapped userdataPtr
 
 foreign import ccall "dht_runner_put"
   dhtRunnerPutC :: CDhtRunnerPtr -> CInfoHashPtr -> CValuePtr -> FunPtr (CDoneCallback a) -> Ptr a -> CBool -> IO ()
@@ -234,35 +278,67 @@ put :: Storable userdata
     -> Bool                  -- ^ Whether the value should be reannounced automatically after it has expired (after 10 minutes)
     -> DhtRunnerM Dht ()
 put _ (StoredValue {}) _ _ _                           = error "DhtRunner.put needs to be fed an InputValue!"
-put h (InputValue vbs usertype) dcb userdata permanent = ask >>= \ dhtrunner -> liftIO $ do
+put h (InputValue vbs usertype) dcb userdata permanent = use dhtRunner >>= \ dhtrunner -> liftIO $ do
   withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
     dhtInfohashFromHexC hPtr hStrPtr
     dcbCWrapped <- wrapDoneCallbackC $ fromDoneCallback dcb
     vPtr <- unDht $ valueFromBytes vbs
     unDht $ setValueUserType vPtr usertype
-    dhtRunnerPutC (dhtRunnerPtr dhtrunner) hPtr vPtr dcbCWrapped userdataPtr (fromBool permanent)
+    dhtRunnerPutC (_dhtRunnerPtr dhtrunner) hPtr vPtr dcbCWrapped userdataPtr (fromBool permanent)
 
 foreign import ccall "dht_runner_listen"
   dhtRunnerListenC :: CDhtRunnerPtr -> CInfoHashPtr -> FunPtr (CValueCallback a) -> FunPtr (CShutdownCallback a) -> Ptr a -> IO (Ptr ())
 
-{-| Initiate a Listen operation for a given hash. The callback will be
-   invoked once for every value found and once also when that same value expires
-   on the DHT. While the Listen operation is not cancelled (or the node
-   shutdown), it goes on. Threfore, values subsequently published will be
-   received.
+{-| Initiate a Listen operation for a given hash.
+
+   * The `ValueCallback` will be invoked once for every value found and once
+   also when each of these same values expire on the DHT.
+   * While the Listen operation is not cancelled (or the node shutdown), it goes
+   on. Threfore, values subsequently published will be received.
+   * When `listen` terminates, an `OpToken` is added to the map of tokens (`listenTokens`)
+   for the given hash in the `DhtRunnerState`.
 -}
 listen :: Storable userdata
        => InfoHash                  -- ^ The hash indicating where to listen to.
        -> ValueCallback userdata    -- ^ The callback to invoke when a value is found or has expired.
        -> ShutdownCallback userdata -- ^ The callback to invoke before the OpenDHT node shuts down.
        -> userdata                  -- ^ User data to pass to the callback.
-       -> DhtRunnerM Dht OpToken
-listen h vcb scb userdata = ask >>= \ dhtrunner -> liftIO $ do
-  withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
-    dhtInfohashFromHexC hPtr hStrPtr
-    vcbCWrapped <- wrapValueCallbackC $ fromValueCallBack vcb
-    scbCWrapped <- wrapShutdownCallbackC $ fromShutdownCallback scb
-    OpToken <$> dhtRunnerListenC (dhtRunnerPtr dhtrunner) hPtr vcbCWrapped scbCWrapped userdataPtr
+       -> DhtRunnerM Dht ()
+listen h vcb scb userdata = do
+  dhtrunner <- use dhtRunner
+  tokensMap <- use listenTokens
+  t <- liftIO $ do
+    withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
+      dhtInfohashFromHexC hPtr hStrPtr
+      vcbCWrapped <- wrapValueCallbackC $ fromValueCallBack vcb
+      scbCWrapped <- wrapShutdownCallbackC $ fromShutdownCallback scb
+      OpToken <$> dhtRunnerListenC (_dhtRunnerPtr dhtrunner) hPtr vcbCWrapped scbCWrapped userdataPtr
+  let mtokens   = tokensMap ^.at h
+      newTokens = maybe [t] (t:) mtokens
+  listenTokens %= Map.insert h newTokens
+
+foreign import ccall "dht_runner_cancel_listen" dhtRunnerCancelListenC :: CDhtRunnerPtr -> CInfoHashPtr -> COpTokenPtr -> IO ()
+
+{-| Cancel an on-going Listen operation.
+
+   If no Listen request is found for the given arguments, the function returns
+   and does nothing.
+-}
+cancelListen :: InfoHash -- ^ The hash for which the Listen request was previously issued.
+             -> OpToken  -- ^ The token associated identifying the exact Listen operation.
+             -> MaybeT (DhtRunnerM Dht) ()
+cancelListen h t = do
+  dhtrunner <- lift $ use dhtRunner
+  tokensMap <- lift $ use listenTokens
+  tokens    <- MaybeT $ return $ tokensMap ^.at h
+  i         <- MaybeT $ return $ List.elemIndex t tokens
+  case splitAt i tokens of
+    (beg, t':rest) -> do
+      liftIO $ withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> do
+        dhtInfohashFromHexC hPtr hStrPtr
+        dhtRunnerCancelListenC (_dhtRunnerPtr dhtrunner) hPtr (_opTokenPtr t')
+      lift $ listenTokens %= Map.insert h (beg++rest)
+    (_, [])        -> error "cancelListen: the token list should not have been empty."
 
 makeDhtRunnerConfig :: DhtRunnerConfig -> Dht CDhtRunnerConfig
 makeDhtRunnerConfig dhtConf = undefined
