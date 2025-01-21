@@ -32,6 +32,7 @@ module OpenDHT.DhtRunner ( DhtRunner
                          , put
                          , listen
                          , cancelListen
+                         , shutdown
                          ) where
 
 import qualified Data.List as List
@@ -336,6 +337,20 @@ cancelListen h t = do
         dhtRunnerCancelListenC (_dhtRunnerPtr dhtrunner) hPtr (_opTokenPtr t')
       lift $ listenTokens %= Map.insert h (beg++rest)
     (_, [])        -> error "cancelListen: the token list should not have been empty."
+
+foreign import ccall "dht_runner_shutdown" dhtRunnerShutdownC :: CDhtRunnerPtr -> FunPtr (CShutdownCallback a) -> Ptr a -> IO ()
+
+{-| Perform the DHT shutdown.
+-}
+shutdown :: Storable userdata
+         => ShutdownCallback userdata -- ^ The callback to invoke before the OpenDHT node shuts down.
+         -> userdata                  -- ^ User data to pass to the callback.
+         -> DhtRunnerM Dht ()
+shutdown scb userdata = do
+  dhtrunner <- use dhtRunner
+  liftIO $ with userdata $ \ userdataPtr -> do
+    scbCWrapped <- wrapShutdownCallbackC $ fromShutdownCallback scb
+    dhtRunnerShutdownC (_dhtRunnerPtr dhtrunner) scbCWrapped userdataPtr
 
 makeDhtRunnerConfig :: DhtRunnerConfig -> Dht CDhtRunnerConfig
 makeDhtRunnerConfig dhtConf = undefined
