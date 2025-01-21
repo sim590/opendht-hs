@@ -66,36 +66,6 @@ import OpenDHT.Internal.Value
 import OpenDHT.Internal.DhtRunner
 import OpenDHT.Internal.InfoHash
 
-{-| Callback invoked whenever a `Value` is retrieved on the DHT during a
-   Get (`get`) request. This callback shall return a boolean indicating whether to
-   stop the Get request or not.
--}
-type GetCallback  a = Value -- ^ A value found for the asked hash.
-                   -> a     -- ^ User data passed from the initial call to `get`.
-                   -> IO Bool
-
-{-| Callback invoked whenever a `Value` is retrieved on the DHT during a Liste
-   (`listen`) request. This callback shall be called once when a value is found
-   and once when this same value has expired on the network. Finally, it returns a
-   boolean indicating whether to stop the Listen request or not.
--}
-type ValueCallback a = Value -- ^ A value found for the asked hash.
-                    -> Bool  -- ^ Whether the value is expired or not.
-                    -> a     -- ^ User data passed from the initial call to `listen`.
-                    -> IO Bool
-
-{-| The generic callback invoked for all asynchronous operations when those
-   terminate.
--}
-type DoneCallback a = Bool -- ^ A boolean indicating whether the operation was successful or not.
-                   -> a    -- ^ User data passed from the initial call to the function.
-                   -> IO ()
-
-{-| A callback invoked before the Dhtnode is shutdown.
--}
-type ShutdownCallback a = a -- ^ User data passed from the initial call to the function.
-                       -> IO ()
-
 type CDhtRunnerPtr = Ptr ()
 type COpTokenPtr   = Ptr ()
 
@@ -158,6 +128,36 @@ newtype DhtRunnerM m a = DhtRunnerM { unwrapDhtRunnerM :: StateT DhtRunnerState 
 
 instance MonadTrans DhtRunnerM where
   lift = DhtRunnerM . lift
+
+{-| Callback invoked whenever a `Value` is retrieved on the DHT during a
+   Get (`get`) request. This callback shall return a boolean indicating whether to
+   stop the Get request or not.
+-}
+type GetCallback  a = Value -- ^ A value found for the asked hash.
+                   -> a     -- ^ User data passed from the initial call to `get`.
+                   -> IO Bool
+
+{-| Callback invoked whenever a `Value` is retrieved on the DHT during a Liste
+   (`listen`) request. This callback shall be called once when a value is found
+   and once when this same value has expired on the network. Finally, it returns a
+   boolean indicating whether to stop the Listen request or not.
+-}
+type ValueCallback a = Value -- ^ A value found for the asked hash.
+                    -> Bool  -- ^ Whether the value is expired or not.
+                    -> a     -- ^ User data passed from the initial call to `listen`.
+                    -> IO Bool
+
+{-| The generic callback invoked for all asynchronous operations when those
+   terminate.
+-}
+type DoneCallback a = Bool -- ^ A boolean indicating whether the operation was successful or not.
+                   -> a    -- ^ User data passed from the initial call to the function.
+                   -> IO ()
+
+{-| A callback invoked before the Dhtnode is shutdown.
+-}
+type ShutdownCallback a = a -- ^ User data passed from the initial call to the function.
+                       -> IO ()
 
 fromGetCallBack :: Storable t => GetCallback t -> CGetCallback t
 fromGetCallBack gcb vPtr userdataPtr = do
