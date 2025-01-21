@@ -42,6 +42,7 @@ import OpenDHT.Internal.InfoHash
    functions.
 -}
 newtype InfoHash = InfoHash { _infoHashString :: String }
+  deriving (Eq, Ord)
 
 instance Show InfoHash where
   show = _infoHashString
