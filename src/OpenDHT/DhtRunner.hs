@@ -18,7 +18,6 @@
 module OpenDHT.DhtRunner ( DhtRunner
                          , DhtRunnerM
                          , runDhtRunnerM
-                         , DhtRunnerState (..)
                          , dhtRunner
                          , listenTokens
                          , OpToken
@@ -76,8 +75,6 @@ newtype DhtRunner = DhtRunner { _dhtRunnerPtr :: CDhtRunnerPtr }
 newtype OpToken = OpToken { _opTokenPtr :: COpTokenPtr }
   deriving Eq
 
-{-|
--}
 data DhtRunnerState = DhtRunnerState { _dhtRunner    :: DhtRunner              -- ^ The DhtRunner.
                                      , _listenTokens :: Map InfoHash [OpToken] -- ^ Map tracking the different Listen requests for
                                                                                -- every calls to `listen` according to their
