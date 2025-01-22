@@ -13,6 +13,8 @@ extra-doc-files: CHANGELOG.md
 common warnings
     ghc-options: -Wall -Wcompat -Wincomplete-record-updates
                  -Wincomplete-uni-patterns -Wredundant-constraints
+common threading
+    ghc-options: -threaded
 
 library
     import:             warnings

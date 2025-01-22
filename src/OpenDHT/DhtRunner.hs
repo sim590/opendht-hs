@@ -56,6 +56,7 @@ import Control.Monad.State ( StateT
                            , execStateT
                            )
 import qualified Control.Monad.State as ST
+import Control.Concurrent.MVar
 
 import Foreign.Ptr
 import Foreign.Storable
@@ -215,11 +216,13 @@ deleteOpToken = liftIO . dhtOpTokenDeleteC . _opTokenPtr
 runDhtRunnerM :: Storable userdata
               => ShutdownCallback userdata -- ^ A callback to run before shutting down the DHT node.
               -> userdata                  -- ^ User data to pass to the `ShutdownCallback`.
+              -> MVar ()
               -> DhtRunnerM Dht ()         -- ^ The `DhtRunnerM` action.
               -> IO ()
-runDhtRunnerM scb userdata runnerAction = unDht $ do
+runDhtRunnerM scb userdata mv runnerAction = unDht $ do
   dhtrunner <- initialize
   s <- execStateT (unwrapDhtRunnerM (runnerAction >> shutdown scb userdata)) (DhtRunnerState dhtrunner Map.empty)
+  liftIO $ putMVar mv ()
   delete dhtrunner
   forM_ (Map.toList (s^.listenTokens) ^. traverse . _2) deleteOpToken
 
