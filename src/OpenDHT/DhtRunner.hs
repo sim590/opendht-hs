@@ -35,7 +35,6 @@ module OpenDHT.DhtRunner ( DhtRunner
                          , cancelPut
                          , listen
                          , cancelListen
-                         , shutdown
                          ) where
 
 import Data.Word
@@ -213,10 +212,14 @@ deleteOpToken = liftIO . dhtOpTokenDeleteC . _opTokenPtr
    terminate while DHT operations are still susceptible to occur for the
    application.
 -}
-runDhtRunnerM :: DhtRunnerM Dht () -> IO ()
-runDhtRunnerM runnerAction = unDht $ do
+runDhtRunnerM :: Storable userdata
+              => ShutdownCallback userdata -- ^ A callback to run before shutting down the DHT node.
+              -> userdata                  -- ^ User data to pass to the `ShutdownCallback`.
+              -> DhtRunnerM Dht ()         -- ^ The `DhtRunnerM` action.
+              -> IO ()
+runDhtRunnerM scb userdata runnerAction = unDht $ do
   dhtrunner <- initialize
-  s <- execStateT (unwrapDhtRunnerM runnerAction) (DhtRunnerState dhtrunner Map.empty)
+  s <- execStateT (unwrapDhtRunnerM (runnerAction >> shutdown scb userdata)) (DhtRunnerState dhtrunner Map.empty)
   delete dhtrunner
   forM_ (Map.toList (s^.listenTokens) ^. traverse . _2) deleteOpToken
 
