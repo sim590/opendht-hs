@@ -17,7 +17,8 @@ common threading
     ghc-options: -threaded
 
 library
-    import:             warnings
+    import:             warnings,
+                        threading
     exposed-modules:    OpenDHT
                         OpenDHT.DhtRunner
                         OpenDHT.Types
