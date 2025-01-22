@@ -35,17 +35,6 @@ import Foreign.Marshal.Array
 import OpenDHT.Types
 import OpenDHT.Internal.InfoHash
 
-{-| This type represents a 160-bit string of bytes consistent with the SHA1
-   specification.
-
-   It is at the heart of this library and is used as arguments for the get/put
-   functions.
--}
-newtype InfoHash = InfoHash { _infoHashString :: String }
-
-instance Show InfoHash where
-  show = _infoHashString
-
 gettingInfoHash :: MonadIO f => (CInfoHashPtr -> IO String) -> f InfoHash
 gettingInfoHash = (InfoHash <$>) . liftIO . withCInfohash
 

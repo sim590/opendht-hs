@@ -19,6 +19,18 @@ import Foreign.Marshal.Utils
 
 #include <opendht/opendht_c.h>
 
+{-| This type represents a 160-bit string of bytes consistent with the SHA1
+   specification.
+
+   It is at the heart of this library and is used as arguments for the get/put
+   functions.
+-}
+newtype InfoHash = InfoHash { _infoHashString :: String }
+  deriving (Eq, Ord)
+
+instance Show InfoHash where
+  show = _infoHashString
+
 {-| Type synonym for C-bindings. Not meant to be used by the library user.
 -}
 {# pointer *dht_infohash as CInfoHashPtr -> CInfoHash #}

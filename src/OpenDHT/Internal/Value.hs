@@ -10,6 +10,7 @@
 
 module OpenDHT.Internal.Value where
 
+import Data.Functor
 import qualified Data.ByteString as BS
 
 import Control.Monad
@@ -83,14 +84,13 @@ foreign import ccall "wr_dht_value_get_recipient" dhtValueGetRecipientC :: CInfo
 {-| Get the recipient of an OpenDHT value. This field is a metadata.
 -}
 getValueRecipientId :: CValuePtr -> Dht InfoHash
-getValueRecipientId vptr = do
-  hstr <- liftIO $ do
-    hPtr <- malloc
-    dhtValueGetRecipientC hPtr vptr
-    hstr <- infoHashToString hPtr
-    free hPtr
-    return hstr
-  infoHashFromHex hstr
+getValueRecipientId vptr = getRecipientHashString <&> InfoHash
+  where getRecipientHashString = liftIO $ do
+          hPtr <- malloc
+          dhtValueGetRecipientC hPtr vptr
+          hstr <- infoHashToString hPtr
+          free hPtr
+          return hstr
 
 foreign import ccall "dht_value_get_user_type" dhtValueGetUserTypeC  :: CValuePtr -> IO (Ptr CChar)
 
