@@ -8,7 +8,7 @@
   Maintainer  : sim.desaulniers@gmail.com
 
   This encapsulates functions and datatypes for manipulating an OpenDHT node. In
-  OpenDHT, a node is used through the class DhtRunner. This module exposes this
+  OpenDHT, a node is used through the class @DhtRunner@. This module exposes this
   class' functions.
 -}
 
@@ -140,7 +140,7 @@ type GetCallback  a = Value -- ^ A value found for the asked hash.
                    -> a     -- ^ User data passed from the initial call to `get`.
                    -> IO Bool
 
-{-| Callback invoked whenever a `Value` is retrieved on the DHT during a Liste
+{-| Callback invoked whenever a `Value` is retrieved on the DHT during a Listen
    (`listen`) request. This callback shall be called once when a value is found
    and once when this same value has expired on the network. Finally, it returns a
    boolean indicating whether to stop the Listen request or not.
@@ -206,11 +206,11 @@ deleteOpToken = liftIO . dhtOpTokenDeleteC . _opTokenPtr
 {-| Starts a DhtRunner session. This initializes the underlying OpenDHT node and
    takes care of freeing it before this function terminates.
 
-   DhtRunner's function calls don't block the thread they're running on.
+   @DhtRunner@'s function calls don't block the thread they're running on.
    Therefore, the user should take care of writing appropriate concurrency code
    for waiting on the underlying node's callback invocation before letting this
    function terminate. In general, the programmer should not let this function
-   terminate while DHT operations are still susceptible to take place by the
+   terminate while DHT operations are still susceptible to occur for the
    application.
 -}
 runDhtRunnerM :: DhtRunnerM Dht () -> IO ()
@@ -237,14 +237,15 @@ getNodeId = infohashFromDhtRunner dhtRunnerGetNodeIdC
 
 foreign import ccall "wr_dht_runner_get_id" dhtRunnerGetIdC :: CDhtRunnerPtr -> CInfoHashPtr -> IO ()
 
-{-| Get the public key ID of the DhtRunner.
+{-| Get the public key ID of the @DhtRunner@.
 -}
 getPublicKeyID :: DhtRunnerM Dht InfoHash
 getPublicKeyID = infohashFromDhtRunner dhtRunnerGetIdC
 
 foreign import ccall "dht_runner_run" dhtRunnerRunC :: CDhtRunnerPtr -> CInt -> IO CInt
 
-{-| Run the OpenDHT node on a given port.
+{-| Run the OpenDHT node on a given port. Use @0@ to let the network layer
+   decide.
 -}
 run :: Int -- ^ The port on which to run the DHT node.
     -> DhtRunnerM Dht ()
@@ -275,7 +276,7 @@ bootstrap addr port = do
 foreign import ccall "dht_runner_get"
   dhtRunnerGetC :: CDhtRunnerPtr -> CInfoHashPtr  -> FunPtr (CGetCallback a) -> FunPtr (CDoneCallback a) -> Ptr a -> IO ()
 
-{-| Get a value pointed by a given hash on the DHT.
+{-| Get a `Value` pointed at by a given hash on the DHT.
 -}
 get :: Storable userdata
     => InfoHash              -- ^ The hash for which to get data at.
@@ -293,14 +294,16 @@ get h gcb dcb userdata = use dhtRunner >>= \ dhtrunner -> liftIO $ do
 foreign import ccall "dht_runner_put"
   dhtRunnerPutC :: CDhtRunnerPtr -> CInfoHashPtr -> CValuePtr -> FunPtr (CDoneCallback a) -> Ptr a -> CBool -> IO ()
 
-{-| Put data on the DHT for a given hash.
+{-| Put a `Value` on the DHT for a given hash.
 -}
 put :: Storable userdata
     => InfoHash              -- ^ The hash under which to store the value.
     -> Value                 -- ^ The value to put on the DHT.
     -> DoneCallback userdata -- ^ The callback to invoke when the request is completed (or has failed).
     -> userdata              -- ^ User data to pass to the callback.
-    -> Bool                  -- ^ Whether the value should be reannounced automatically after it has expired (after 10 minutes)
+    -> Bool                  -- ^ Whether the value should be "permanent". A permanent value is
+                             --   reannounced automatically after it has expired (after 10 minutes). __NOTE__: This requires
+                             --   node to keep running.
     -> DhtRunnerM Dht ()
 put _ (StoredValue {}) _ _ _                           = error "DhtRunner.put needs to be fed an InputValue!"
 put h (InputValue vbs usertype) dcb userdata permanent = use dhtRunner >>= \ dhtrunner -> liftIO $ do
@@ -318,7 +321,9 @@ foreign import ccall "dht_runner_cancel_put" dhtRunnerCancelPutC :: CDhtRunnerPt
 
 {-| Cancel a Put request.
 
-  This function is useful for cancelling a "permanent" Put request.
+  This function is useful for cancelling a "permanent" Put request. Therefore,
+  if the user puts a permanent value on the network, he should think about
+  storing the value ID then.
 -}
 cancelPut :: InfoHash -- ^ The hash for which the value was first put.
           -> Word64   -- ^ The value ID.
@@ -381,7 +386,8 @@ cancelListen h t = do
 
 foreign import ccall "dht_runner_shutdown" dhtRunnerShutdownC :: CDhtRunnerPtr -> FunPtr (CShutdownCallback a) -> Ptr a -> IO ()
 
-{-| Perform the DHT shutdown.
+{-| Gracefuly shutdown the DHT node. This function should be the last function
+   called before exiting the context of `DhtRunnerM Dht`.
 -}
 shutdown :: Storable userdata
          => ShutdownCallback userdata -- ^ The callback to invoke before the OpenDHT node shuts down.
