@@ -23,7 +23,6 @@ library
                         OpenDHT.DhtRunner
                         OpenDHT.Types
                         OpenDHT.InfoHash
-                        OpenDHT.Blob
                         OpenDHT.Value
                         OpenDHT.PublicKey
     other-modules:      OpenDHT.Internal.DhtRunner
