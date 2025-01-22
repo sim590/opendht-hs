@@ -25,6 +25,8 @@ module OpenDHT.DhtRunner ( DhtRunner
                          , ValueCallback
                          , DoneCallback
                          , ShutdownCallback
+                         , getNodeId
+                         , getPublicKeyID
                          , run
                          , isRunning
                          , bootstrap
@@ -37,6 +39,7 @@ module OpenDHT.DhtRunner ( DhtRunner
                          ) where
 
 import Data.Word
+import Data.Functor
 import qualified Data.List as List
 import Data.Map ( Map
                 )
@@ -216,6 +219,28 @@ runDhtRunnerM runnerAction = unDht $ do
   s <- execStateT (unwrapDhtRunnerM runnerAction) (DhtRunnerState dhtrunner Map.empty)
   delete dhtrunner
   forM_ (Map.toList (s^.listenTokens) ^. traverse . _2) deleteOpToken
+
+{-| Boiler plate code for getNodeId, getPublicKeyID.
+-}
+infohashFromDhtRunner :: (CDhtRunnerPtr -> CInfoHashPtr -> IO ()) -> DhtRunnerM Dht InfoHash
+infohashFromDhtRunner f = (use dhtRunner >>= fromDhtRunner) <&> InfoHash
+  where fromDhtRunner dhtrunner = liftIO $ withCInfohash $ \ hPtr -> do
+          f (_dhtRunnerPtr dhtrunner) hPtr
+          infoHashToString hPtr
+
+foreign import ccall "wr_dht_runner_get_node_id" dhtRunnerGetNodeIdC :: CDhtRunnerPtr -> CInfoHashPtr -> IO ()
+
+{-| Get the ID of the underlying DHT node.
+-}
+getNodeId :: DhtRunnerM Dht InfoHash
+getNodeId = infohashFromDhtRunner dhtRunnerGetNodeIdC
+
+foreign import ccall "wr_dht_runner_get_id" dhtRunnerGetIdC :: CDhtRunnerPtr -> CInfoHashPtr -> IO ()
+
+{-| Get the public key ID of the DhtRunner.
+-}
+getPublicKeyID :: DhtRunnerM Dht InfoHash
+getPublicKeyID = infohashFromDhtRunner dhtRunnerGetIdC
 
 foreign import ccall "dht_runner_run" dhtRunnerRunC :: CDhtRunnerPtr -> CInt -> IO CInt
 

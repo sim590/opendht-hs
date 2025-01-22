@@ -1,5 +1,16 @@
 
+#include <string.h>
+
 #include "DhtRunner.h"
+#include <opendht/def.h>
+#include <opendht/opendht_c.h>
+
+void wr_dht_runner_get_node_id(const dht_runner* runner, dht_infohash* h) {
+    memcpy(h->d, dht_runner_get_node_id(runner).d, HASH_LEN);
+}
+void wr_dht_runner_get_id(const dht_runner* runner, dht_infohash* h) {
+    memcpy(h->d, dht_runner_get_id(runner).d, HASH_LEN);
+}
 
 wr_dht_node_config* to_wr_dht_node_config(wr_dht_node_config* dst, dht_node_config* const src)
 {
