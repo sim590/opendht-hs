@@ -94,7 +94,7 @@ data DhtIdentity = DhtIdentity { _privatekey  :: BS.ByteString
 makeLenses ''DhtIdentity
 
 data DhtNodeConfig = DhtNodeConfig { _nodeId          :: InfoHash
-                                   , _network         :: Int
+                                   , _network         :: Word32
                                    , _isBootstrap     :: Bool
                                    , _maintainStorage :: Bool
                                    , _persistPath     :: String
