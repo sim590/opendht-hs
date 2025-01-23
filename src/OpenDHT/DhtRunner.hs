@@ -216,7 +216,8 @@ deleteOpToken = liftIO . dhtOpTokenDeleteC . _opTokenPtr
 runDhtRunnerM :: Storable userdata
               => ShutdownCallback userdata -- ^ A callback to run before shutting down the DHT node.
               -> userdata                  -- ^ User data to pass to the `ShutdownCallback`.
-              -> MVar ()
+              -> MVar ()                   -- ^ Synchronizing variable used to block while waiting on the
+                                           --   `ShutdownCallback` to terminate.
               -> DhtRunnerM Dht ()         -- ^ The `DhtRunnerM` action.
               -> IO ()
 runDhtRunnerM scb userdata mv runnerAction = unDht $ do
