@@ -8,12 +8,13 @@
   Maintainer  : sim.desaulniers@gmail.com
 -}
 
-module OpenDHT.PublicKey ( PublicKey
+module OpenDHT.PublicKey ( PublicKey (..)
                          ) where
 
 import Data.ByteString
 
-type PublicKey = ByteString
+data PublicKey = PublicKey ByteString
+               | ExportedKey String
 
 --  vim: set sts=2 ts=2 sw=2 tw=120 et :
 

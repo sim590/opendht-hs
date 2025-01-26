@@ -51,7 +51,7 @@ fromBytes dataBs mPassword dataImport = do
   guard (pPtr /= nullPtr)
   return pPtr
 
-export :: Ptr a -> Maybe String -> DataExportation a -> MaybeT Dht BS.ByteString
+export :: Ptr a -> Maybe String -> DataExportation a -> MaybeT Dht String
 export pPtr mPassword dataExport = do
   let withSizedArray s f = liftIO $ alloca $ \ sPtr -> do
         poke sPtr (fromIntegral s)
@@ -67,7 +67,7 @@ export pPtr mPassword dataExport = do
     c <- dataExport pPtr bytesPtr sPtr passPtr
     guard (c == 0)
     ccharArray <- peekArray (fromIntegral s') bytesPtr
-    return $ BS.pack $ map (BSI.c2w . castCCharToChar) ccharArray
+    return $ map castCCharToChar ccharArray
 
 --  vim: set sts=2 ts=2 sw=2 tw=120 et :
 

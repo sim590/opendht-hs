@@ -74,7 +74,7 @@ delete = liftIO . dhtPublickeyDeleteC . _publicKeyPtr
 
 foreign import ccall "dht_publickey_export" dhtPublickeyExportC :: CPublicKeyPtr -> Ptr CChar -> Ptr CUInt -> IO CInt
 
-export :: CPublicKey -> MaybeT Dht BS.ByteString
+export :: CPublicKey -> MaybeT Dht String
 export (CPublicKey pPtr) = Crypto.export pPtr Nothing publicKeyExport
   where
     publicKeyExport pPtr' bytesPtr sPtr _ = dhtPublickeyExportC pPtr' bytesPtr sPtr
