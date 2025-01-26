@@ -317,7 +317,7 @@ put h (InputValue vbs usertype) dcb userdata permanent = use dhtRunner >>= \ dht
   withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
     dhtInfohashFromHexC hPtr hStrPtr
     dcbCWrapped <- wrapDoneCallbackC $ fromDoneCallback dcb
-    vPtr <- unDht $ valueFromBytes vbs
+    vPtr <- unDht $ valuePtrFromBytes vbs
     unDht $ setValueUserType vPtr usertype
     dhtRunnerPutC (_dhtRunnerPtr dhtrunner) hPtr vPtr dcbCWrapped userdataPtr (fromBool permanent)
 
