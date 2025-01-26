@@ -43,7 +43,7 @@ fromBytes dataBs password = Crypto.fromBytes dataBs (Just password) privateKeyIm
 
 foreign import ccall "dht_privatekey_export" dhtPrivatekeyExportC :: CPrivateKeyPtr -> Ptr CChar -> Ptr CUInt -> Ptr CChar-> IO CInt
 
-export :: CPrivateKey -> String -> MaybeT Dht BS.ByteString
+export :: CPrivateKey -> String -> MaybeT Dht String
 export (CPrivateKey pPtr) password = Crypto.export pPtr (Just password) privateKeyExport
   where
     privateKeyExport pPtr' bytesPtr sPtr (Just passPtr) = dhtPrivatekeyExportC pPtr' bytesPtr sPtr passPtr
