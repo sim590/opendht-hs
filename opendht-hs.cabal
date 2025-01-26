@@ -25,6 +25,7 @@ library
                         OpenDHT.InfoHash
                         OpenDHT.Value
                         OpenDHT.PublicKey
+                        OpenDHT.PrivateKey
                         OpenDHT.Certificate
     other-modules:      OpenDHT.Internal.DhtRunner
                         OpenDHT.Internal.InfoHash
