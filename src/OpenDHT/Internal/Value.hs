@@ -35,16 +35,16 @@ foreign import ccall "dht_value_new" dhtValueNewC :: Ptr CUChar -> CULong -> IO 
 
 {-| Build an OpenDHT Value from a string of bytes.
 -}
-valueFromBytes :: BS.ByteString -> Dht CValuePtr
-valueFromBytes bs = liftIO $ withArray (map CUChar $ BS.unpack bs)
+valuePtrFromBytes :: BS.ByteString -> Dht CValuePtr
+valuePtrFromBytes bs = liftIO $ withArray (map CUChar $ BS.unpack bs)
                            $ \ ptrBytes -> dhtValueNewC ptrBytes (fromIntegral $ BS.length bs)
 
 foreign import ccall "dht_value_new_from_string" dhtValueNewFromStringC :: Ptr CChar -> IO CValuePtr
 
 {-| Build an OpenDHT Value from a string of characters.
 -}
-valueFromString :: String -> Dht CValuePtr
-valueFromString s = liftIO $ withCString s dhtValueNewFromStringC
+valuePtrFromString :: String -> Dht CValuePtr
+valuePtrFromString s = liftIO $ withCString s dhtValueNewFromStringC
 
 -- foreign import ccall "dht_value_ref" dhtValueRefC :: CValuePtr -> IO CValuePtr
 foreign import ccall "dht_value_unref" dhtValueUnrefC :: CValuePtr -> IO ()

@@ -22,12 +22,17 @@ library
                         OpenDHT.Blob
                         OpenDHT.Value
                         OpenDHT.PublicKey
+                        OpenDHT.Certificate
     other-modules:      OpenDHT.Internal.InfoHash
                         OpenDHT.Internal.Blob
                         OpenDHT.Internal.Value
                         OpenDHT.Internal.PublicKey
+                        OpenDHT.Internal.PrivateKey
+                        OpenDHT.Internal.Crypto
+                        OpenDHT.Internal.Certificate
     build-depends:      base       ^>= 4.17.2.1,
-                        bytestring ^>= 0.11.5
+                        bytestring ^>= 0.11.5,
+                        transformers
     build-tool-depends: c2hs:c2hs
     pkgconfig-depends:  opendht-c
     hs-source-dirs:     src
@@ -35,6 +40,8 @@ library
 
     c-sources:          src/OpenDHT/Blob.c
                         src/OpenDHT/Internal/Value.c
+                        src/OpenDHT/Internal/Certificate.c
+                        src/OpenDHT/Internal/PublicKey.c
 
 --  vim: set sts=4 ts=4 sw=4 tw=120 et :
 
