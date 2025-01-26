@@ -10,11 +10,13 @@
 
 module OpenDHT.Internal.Value where
 
+import Data.Maybe
 import Data.Word
 import Data.Functor
 import qualified Data.ByteString as BS
 
 import Control.Monad
+import Control.Monad.Trans.Maybe
 import Control.Monad.IO.Class
 
 import Foreign.Ptr (Ptr)
@@ -104,6 +106,12 @@ getValueRecipientId vptr = getRecipientHashString <&> InfoHash
           free hPtr
           return hstr
 
+getOwnerPublicKey :: CValuePtr -> Dht PublicKey
+getOwnerPublicKey vptr = do
+  opkPtr <- getValueOwner vptr
+  mStr <- runMaybeT $ export (CPublicKey opkPtr)
+  return $ ExportedKey $ fromMaybe "" mStr
+
 foreign import ccall "dht_value_get_user_type" dhtValueGetUserTypeC  :: CValuePtr -> IO (Ptr CChar)
 
 {-| Get the user-type of an OpenDHT value. This field is a metadata.
@@ -118,11 +126,10 @@ foreign import ccall "dht_value_set_user_type" dhtValueSetUserTypeC  :: CValuePt
 setValueUserType :: CValuePtr -> String -> Dht ()
 setValueUserType vptr s = liftIO $ withCString s $ \ cstr -> dhtValueSetUserTypeC vptr cstr
 
--- TODO: ajouter le owner... (PublicKey)
 storedValueFromCValuePtr :: CValuePtr -> Dht Value
 storedValueFromCValuePtr vPtr = StoredValue <$> getValueData        vPtr
                                             <*> getValueId          vPtr
-                                            <*> return PublicKey
+                                            <*> getOwnerPublicKey   vPtr
                                             <*> getValueRecipientId vPtr
                                             <*> getValueUserType    vPtr
 
