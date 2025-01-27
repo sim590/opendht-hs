@@ -19,7 +19,7 @@ import Control.Monad
 import Control.Monad.Trans.Maybe
 import Control.Monad.IO.Class
 
-import Foreign.Ptr (Ptr)
+import Foreign.Ptr (Ptr, nullPtr)
 import Foreign.C.Types
 import Foreign.C.String
 import Foreign.Storable
@@ -109,7 +109,9 @@ getValueRecipientId vptr = getRecipientHashString <&> InfoHash
 getOwnerPublicKey :: CValuePtr -> Dht PublicKey
 getOwnerPublicKey vptr = do
   opkPtr <- getValueOwner vptr
-  mStr <- runMaybeT $ export (CPublicKey opkPtr)
+  mStr <- runMaybeT $ do
+    guard (opkPtr /= nullPtr)
+    export (CPublicKey opkPtr)
   return $ ExportedKey $ fromMaybe "" mStr
 
 foreign import ccall "dht_value_get_user_type" dhtValueGetUserTypeC  :: CValuePtr -> IO (Ptr CChar)
