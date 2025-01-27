@@ -40,7 +40,8 @@ library
                         transformers,
                         containers,
                         mtl,
-                        lens
+                        lens,
+                        data-default
     build-tool-depends: c2hs:c2hs
     pkgconfig-depends:  opendht-c
     hs-source-dirs:     src

@@ -21,13 +21,39 @@ module OpenDHT.DhtRunner ( DhtRunner
                          , dhtRunner
                          , listenTokens
                          , OpToken
+                         , DhtRunnerConfig (..)
+                         , dhtConfig
+                         , threaded
+                         , proxyServer
+                         , pushNodeId
+                         , pushToken
+                         , pushTopic
+                         , pushPlatform
+                         , peerDiscovery
+                         , peerPublish
+                         , serverCa
+                         , clientIdentity
+                         , logging
+                         , DhtSecureConfig (..)
+                         , nodeConfig
+                         , nodeId
+                         , DhtNodeConfig (..)
+                         , nodeIdHash
+                         , network
+                         , isBootstrap
+                         , maintainStorage
+                         , persistPath
+                         , DhtIdentity (..)
+                         , privatekey
+                         , certificate
                          , GetCallback
                          , ValueCallback
                          , DoneCallback
                          , ShutdownCallback
-                         , getNodeId
+                         , getNodeIdHash
                          , getPublicKeyID
                          , run
+                         , runConfig
                          , isRunning
                          , bootstrap
                          , get
@@ -37,6 +63,7 @@ module OpenDHT.DhtRunner ( DhtRunner
                          , cancelListen
                          ) where
 
+import Data.Default
 import Data.Word
 import Data.Functor
 import qualified Data.List as List
@@ -63,13 +90,20 @@ import Foreign.Storable
 import Foreign.C.Types
 import Foreign.C.String
 import Foreign.Marshal.Utils
+import Foreign.Marshal.Alloc
 
 import OpenDHT.Types
 import OpenDHT.InfoHash
 import OpenDHT.Value
+import OpenDHT.PrivateKey
+import OpenDHT.Certificate
 import OpenDHT.Internal.Value
 import OpenDHT.Internal.DhtRunner
 import OpenDHT.Internal.InfoHash
+import qualified OpenDHT.Internal.Certificate as Certificate
+import OpenDHT.Internal.Certificate (CCertificate (..))
+import qualified OpenDHT.Internal.PrivateKey as PrivateKey
+import OpenDHT.Internal.PrivateKey (CPrivateKey (..))
 
 type CDhtRunnerPtr = Ptr ()
 type COpTokenPtr   = Ptr ()
@@ -81,45 +115,84 @@ newtype DhtRunner = DhtRunner { _dhtRunnerPtr :: CDhtRunnerPtr }
 newtype OpToken = OpToken { _opTokenPtr :: COpTokenPtr }
   deriving Eq
 
-data DhtRunnerState = DhtRunnerState { _dhtRunner    :: DhtRunner              -- ^ The DhtRunner.
-                                     , _listenTokens :: Map InfoHash [OpToken] -- ^ Map tracking the different Listen requests for
-                                                                               -- every calls to `listen` according to their
-                                                                               -- respective hash argument.
-                                     }
+data DhtRunnerState = DhtRunnerState
+  { _dhtRunner    :: DhtRunner              -- ^ The DhtRunner.
+  , _listenTokens :: Map InfoHash [OpToken] -- ^ Map tracking the different Listen requests for every calls to `listen`
+                                            --   according to their respective hash argument.
+  }
 makeLenses ''DhtRunnerState
 
-data DhtIdentity = DhtIdentity { _privatekey  :: BS.ByteString
-                               , _certificate :: BS.ByteString
+data DhtIdentity = DhtIdentity { _privatekey  :: PrivateKey
+                               , _certificate :: Certificate
                                }
 makeLenses ''DhtIdentity
 
-data DhtNodeConfig = DhtNodeConfig { _nodeId          :: InfoHash
-                                   , _network         :: Word32
-                                   , _isBootstrap     :: Bool
-                                   , _maintainStorage :: Bool
-                                   , _persistPath     :: String
-                                   }
+instance Default DhtIdentity where
+  def = DhtIdentity { _privatekey  = PrivateKey BS.empty ""
+                    , _certificate = BS.empty
+                    }
+
+data DhtNodeConfig = DhtNodeConfig
+  { _nodeIdHash      :: Maybe InfoHash -- ^ ID of the underlying DHT node (default: `Nothing`).
+                                       --   If not set, it will be randomly generated.
+  , _network         :: Word32         -- ^ ID of the network (default: @0@).
+  , _isBootstrap     :: Bool           -- ^ Whether to run in bootstrap mode (default: `False`).
+  , _maintainStorage :: Bool           -- ^ Whether to help in maintaining storage of
+                                       --   permanent values on the network (default: `False`).
+  , _persistPath     :: String         -- ^ Path to the file on disk where to store the DHT persisting cache for
+                                       --   bootstrapping from last session list of already known nodes (default: empty).
+  }
 makeLenses ''DhtNodeConfig
 
+instance Default DhtNodeConfig where
+  def = DhtNodeConfig { _nodeIdHash      = Nothing
+                      , _network         = 0
+                      , _isBootstrap     = False
+                      , _maintainStorage = False
+                      , _persistPath     = ""
+                      }
+
+{-| DHT node and security config.
+-}
 data DhtSecureConfig = DhtSecureConfig { _nodeConfig :: DhtNodeConfig
-                                       , _id         :: DhtIdentity
+                                       , _nodeId     :: DhtIdentity
                                        }
 makeLenses ''DhtSecureConfig
 
-data DhtRunnerConfig = DhtRunnerConfig { _dhtConfig      :: DhtSecureConfig
-                                       , _threaded       :: Bool
-                                       , _proxyServer    :: String
-                                       , _pushNodeId     :: String
-                                       , _pushToken      :: String
-                                       , _pushTopic      :: String
-                                       , _pushPlatform   :: String
-                                       , _peerDiscovery  :: Bool
-                                       , _peerPublish    :: Bool
-                                       , _serverCa       :: BS.ByteString
-                                       , _clientIdentity :: DhtIdentity
-                                       , _log            :: Bool
-                                       }
+instance Default DhtSecureConfig where
+  def = DhtSecureConfig def def
+
+data DhtRunnerConfig = DhtRunnerConfig
+  { _dhtConfig      :: DhtSecureConfig
+  , _threaded       :: Bool            -- ^ Whether OpenDHT should run in threaded mode (default: `True`)
+  , _proxyServer    :: String          -- ^ The proxy server hostname (defaullt: empty).
+  , _pushNodeId     :: String          -- ^ A node id ([push notifications](https://github.com/savoirfairelinux/opendht/wiki/Push-notifications-support))
+                                       --   (default: empty). This requires running with the proxy server.
+  , _pushToken      :: String          -- ^ Push notification token (default: empty). This requires running with the proxy server.
+  , _pushTopic      :: String          -- ^ Push notification topic (default: empty). This requires running with the proxy server.
+  , _pushPlatform   :: String          -- ^ Push notification platform (default: empty). This requires running with the proxy server.
+  , _peerDiscovery  :: Bool            -- ^ Use multicast to discover nodes announcing themselves (default: `False`).
+  , _peerPublish    :: Bool            -- ^ Publish the DHT node through multicast in order to be discoverable by others (default: `False`).
+  , _serverCa       :: BS.ByteString   -- ^ Proxy server X.509 certificate (default: empty).
+  , _clientIdentity :: DhtIdentity
+  , _logging        :: Bool            -- ^ Enable logging (default: `False`).
+  }
 makeLenses ''DhtRunnerConfig
+
+instance Default DhtRunnerConfig where
+  def = DhtRunnerConfig { _dhtConfig      = def
+                        , _threaded       = True
+                        , _proxyServer    = ""
+                        , _pushNodeId     = ""
+                        , _pushToken      = ""
+                        , _pushTopic      = ""
+                        , _pushPlatform   = ""
+                        , _peerDiscovery  = False
+                        , _peerPublish    = False
+                        , _serverCa       = BS.empty
+                        , _clientIdentity = def
+                        , _logging        = False
+                        }
 
 {-| This type wraps all function calls to OpenDHT. It is a transformer wrapping
    `StateT` and some other monad (usually `Dht`).
@@ -222,7 +295,7 @@ runDhtRunnerM :: Storable userdata
               -> IO ()
 runDhtRunnerM scb userdata mv runnerAction = unDht $ do
   dhtrunner <- initialize
-  s <- execStateT (unwrapDhtRunnerM (runnerAction >> shutdown scb userdata)) (DhtRunnerState dhtrunner Map.empty)
+  s         <- execStateT (unwrapDhtRunnerM (runnerAction >> shutdown scb userdata)) (DhtRunnerState dhtrunner Map.empty)
   liftIO $ putMVar mv ()
   delete dhtrunner
   forM_ (Map.toList (s^.listenTokens) ^. traverse . _2) deleteOpToken
@@ -239,8 +312,8 @@ foreign import ccall "wr_dht_runner_get_node_id" dhtRunnerGetNodeIdC :: CDhtRunn
 
 {-| Get the ID of the underlying DHT node.
 -}
-getNodeId :: DhtRunnerM Dht InfoHash
-getNodeId = infohashFromDhtRunner dhtRunnerGetNodeIdC
+getNodeIdHash :: DhtRunnerM Dht InfoHash
+getNodeIdHash = infohashFromDhtRunner dhtRunnerGetNodeIdC
 
 foreign import ccall "wr_dht_runner_get_id" dhtRunnerGetIdC :: CDhtRunnerPtr -> CInfoHashPtr -> IO ()
 
@@ -251,19 +324,89 @@ getPublicKeyID = infohashFromDhtRunner dhtRunnerGetIdC
 
 foreign import ccall "dht_runner_run" dhtRunnerRunC :: CDhtRunnerPtr -> CInt -> IO CInt
 
-{-| Run the OpenDHT node on a given port. Use @0@ to let the network layer
-   decide.
+{-| Run the OpenDHT node on a given port.
 -}
-run :: Int -- ^ The port on which to run the DHT node.
+run :: Word16 -- ^ The port on which to run the DHT node. Use @0@ to let the network layer decide.
     -> DhtRunnerM Dht ()
 run port = do
   dhtrunner <- use dhtRunner
   void $ liftIO $ dhtRunnerRunC (_dhtRunnerPtr dhtrunner) (fromIntegral port)
 
+withDhtRunnerConfig :: DhtRunnerConfig -> (Ptr CDhtRunnerConfig -> Dht a) -> Dht a
+withDhtRunnerConfig dhtConf dhtActionWithConfig = liftIO $ withCString (dhtConf^.proxyServer)
+  $ \ proxyServerPtr     -> withCString (dhtConf^.pushNodeId)
+  $ \ pushNodeIdPtr      -> withCString (dhtConf^.pushToken)
+  $ \ pushTokenPtr       -> withCString (dhtConf^.pushTopic)
+  $ \ pushTopicPtr       -> withCString (dhtConf^.pushPlatform)
+  $ \ pushPlatformPtr    -> alloca
+  $ \ clientIdentityPtr  -> alloca
+  $ \ dhtConfigPtr       -> alloca
+  $ \ nodeConfigPtr      -> alloca
+  $ \ nodeIdPtr          -> withCString (dhtConf^.dhtConfig.nodeConfig.persistPath)
+  $ \ persistPathPtr     -> withCInfohash
+  $ \ nodeIdHashPtr      -> withCString (show $ dhtConf^.dhtConfig.nodeConfig.nodeIdHash)
+  $ \ nodeIdHashStrPtr   -> alloca
+  $ \ dhtRunnerConfigPtr -> unDht $ do
+    (CCertificate serverCaPtr) <- Certificate.fromBytes $ dhtConf ^. serverCa
+    mClientIdentityPvkPtr      <- runMaybeT $ PrivateKey.fromBytes (dhtConf ^. clientIdentity . privatekey . pvkData)
+                                                                   (dhtConf ^. clientIdentity . privatekey . pvkPassword)
+    (CCertificate clientIdentityCertPtr) <- Certificate.fromBytes (dhtConf ^. clientIdentity . certificate)
+    mNodeIdentityPvkPtr                  <- runMaybeT $ PrivateKey.fromBytes (dhtConf ^. dhtConfig . nodeId . privatekey . pvkData)
+                                                                             (dhtConf ^. dhtConfig . nodeId . privatekey . pvkPassword)
+    (CCertificate nodeIdentityCertPtr) <- Certificate.fromBytes (dhtConf ^. dhtConfig . nodeId . certificate)
+    liftIO $ do
+      poke dhtConfigPtr $ CDhtSecureConfig { _nodeIdC     = nodeIdPtr
+                                           , _nodeConfigC = nodeConfigPtr
+                                           }
+
+      poke nodeIdPtr $ CDhtIdentity { _privatekeyC  = maybe nullPtr _privateKeyPtr mNodeIdentityPvkPtr
+                                    , _certificateC = nodeIdentityCertPtr
+                                    }
+
+      dhtInfohashFromHexC nodeIdHashPtr nodeIdHashStrPtr
+      poke nodeConfigPtr $ CDhtNodeConfig { _persistPathC     = persistPathPtr
+                                          , _nodeIdHashC      = nodeIdHashPtr
+                                          , _networkC         = fromIntegral $ dhtConf ^. dhtConfig . nodeConfig . network
+                                          , _maintainStorageC = dhtConf ^. dhtConfig . nodeConfig . maintainStorage
+                                          , _isBootstrapC     = dhtConf ^. dhtConfig . nodeConfig . isBootstrap
+                                          }
+
+      poke clientIdentityPtr $ CDhtIdentity { _privatekeyC  = maybe nullPtr _privateKeyPtr mClientIdentityPvkPtr
+                                            , _certificateC = clientIdentityCertPtr
+                                            }
+
+      poke dhtRunnerConfigPtr $ CDhtRunnerConfig { _dhtConfigC      = dhtConfigPtr
+                                                 , _threadedC       = dhtConf ^. threaded
+                                                 , _proxyServerC    = proxyServerPtr
+                                                 , _pushNodeIdC     = pushNodeIdPtr
+                                                 , _pushTokenC      = pushTokenPtr
+                                                 , _pushTopicC      = pushTopicPtr
+                                                 , _pushPlatformC   = pushPlatformPtr
+                                                 , _peerDiscoveryC  = dhtConf ^. peerDiscovery
+                                                 , _peerPublishC    = dhtConf ^. peerPublish
+                                                 , _serverCaC       = serverCaPtr
+                                                 , _clientIdentityC = clientIdentityPtr
+                                                 , _loggingC        = dhtConf ^. logging
+                                                 }
+    dhtActionWithConfig dhtRunnerConfigPtr
+
+foreign import ccall "dht_runner_run_config" dhtRunnerRunConfigC :: CDhtRunnerPtr -> CInt -> Ptr CDhtRunnerConfig -> IO CInt
+
+{-| Run the OpenDHT node on a given port according to the specified
+   configuration.
+-}
+runConfig :: Word16          -- ^ The port on which to run the DHT node. Use @0@ to let the network layer decide.
+          -> DhtRunnerConfig -- ^ The DhtRunner configuration.
+          -> DhtRunnerM Dht ()
+runConfig port config = do
+  dhtrunner <- use dhtRunner
+  lift $ withDhtRunnerConfig config $ \ configPtr -> do
+    void $ liftIO $ dhtRunnerRunConfigC (_dhtRunnerPtr dhtrunner) (fromIntegral port) configPtr
+
 foreign import ccall "dht_runner_is_running" dhtRunnerIsRunningC :: CDhtRunnerPtr -> IO CBool
 
 {-| Indicates whether the underlying node is running. This should yield `True`
-   after calling `run`.
+   after calling `run` or `runConfig`.
 -}
 isRunning :: DhtRunnerM Dht Bool
 isRunning = use dhtRunner >>= liftIO . (toBool <$>) . dhtRunnerIsRunningC . _dhtRunnerPtr
@@ -405,9 +548,6 @@ shutdown scb userdata = do
   liftIO $ with userdata $ \ userdataPtr -> do
     scbCWrapped <- wrapShutdownCallbackC $ fromShutdownCallback scb
     dhtRunnerShutdownC (_dhtRunnerPtr dhtrunner) scbCWrapped userdataPtr
-
-makeDhtRunnerConfig :: DhtRunnerConfig -> Dht CDhtRunnerConfig
-makeDhtRunnerConfig dhtConf = undefined
 
 --  vim: set sts=2 ts=2 sw=2 tw=120 et :
 
