@@ -12,7 +12,6 @@ module OpenDHT.Internal.Crypto where
 
 import Data.Foldable
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Internal as BSI
 
 import Control.Monad
 import Control.Monad.IO.Class
