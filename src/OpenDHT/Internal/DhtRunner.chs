@@ -16,6 +16,8 @@ import Foreign.Storable
 
 import OpenDHT.Internal.Value
 import OpenDHT.Internal.InfoHash
+import OpenDHT.Internal.PrivateKey
+import OpenDHT.Internal.Certificate
 
 #include <opendht/opendht_c.h>
 #include "DhtRunner.h"
@@ -32,15 +34,12 @@ foreign import ccall safe "wrapper" wrapDoneCallbackC :: CDoneCallback a-> IO (F
 type CShutdownCallback a = Ptr a -> IO ()
 foreign import ccall safe "wrapper" wrapShutdownCallbackC :: CShutdownCallback a -> IO (FunPtr (CShutdownCallback a))
 
-type CDhtPrivatekey  = ()
-type CDhtCertificate = ()
-
 -- struct OPENDHT_PUBLIC dht_identity {
 --     dht_privatekey* privatekey;
 --     dht_certificate* certificate;
 -- };
-data CDhtIdentity = CDhtIdentity { _privatekeyC  :: Ptr CDhtPrivatekey
-                                 , _certificateC :: Ptr CDhtCertificate
+data CDhtIdentity = CDhtIdentity { _privatekeyC  :: CPrivateKeyPtr
+                                 , _certificateC :: CCertificatePtr
                                  }
 
 instance Storable CDhtIdentity where
@@ -127,7 +126,7 @@ data CDhtRunnerConfig = CDhtRunnerConfig { _dhtConfigC      :: CDhtSecureConfigP
                                          , _pushPlatformC   :: Ptr CChar
                                          , _peerDiscoveryC  :: Bool
                                          , _peerPublishC    :: Bool
-                                         , _serverCaC       :: Ptr CDhtCertificate
+                                         , _serverCaC       :: CCertificatePtr
                                          , _clientIdentityC :: Ptr CDhtIdentity
                                          , _logC            :: Bool
                                          }
