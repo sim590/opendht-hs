@@ -1,9 +1,9 @@
 
 #include <string.h>
 
-#include "DhtRunner.h"
-#include <opendht/def.h>
 #include <opendht/opendht_c.h>
+
+#include "DhtRunner.h"
 
 void wr_dht_runner_get_node_id(const dht_runner* runner, dht_infohash* h) {
     memcpy(h->d, dht_runner_get_node_id(runner).d, HASH_LEN);
@@ -48,6 +48,8 @@ dht_runner_config* from_wr_dht_runner_config(dht_runner_config* dst, wr_dht_runn
 
 int wr_dht_runner_run_config(dht_runner* runner, in_port_t port, wr_dht_runner_config* wr_config) {
     dht_runner_config config;
+    memset(&config, 0, sizeof(dht_runner_config));
+
     from_wr_dht_runner_config(&config, wr_config);
     return dht_runner_run_config(runner, port, &config);
 }
