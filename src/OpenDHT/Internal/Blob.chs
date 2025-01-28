@@ -40,7 +40,7 @@ instance Storable DataView where
     poke p (DataView d s) = {# set dht_data_view->data #} p d
                          >> {# set dht_data_view->size #} p s
     peek p                = DataView <$> {# get dht_data_view->data #} p
-                           <*> {# get dht_data_view->size #} p
+                                     <*> {# get dht_data_view->size #} p
 
 bytesFromDataView :: DataView -> IO BS.ByteString
 bytesFromDataView dv = do

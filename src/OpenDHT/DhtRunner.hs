@@ -390,7 +390,7 @@ withDhtRunnerConfig dhtConf dhtActionWithConfig = liftIO $ withCString (dhtConf^
                                                  }
     dhtActionWithConfig dhtRunnerConfigPtr
 
-foreign import ccall "dht_runner_run_config" dhtRunnerRunConfigC :: CDhtRunnerPtr -> CInt -> Ptr CDhtRunnerConfig -> IO CInt
+foreign import ccall "wr_dht_runner_run_config" dhtRunnerRunConfigC :: CDhtRunnerPtr -> CShort -> Ptr CDhtRunnerConfig -> IO CInt
 
 {-| Run the OpenDHT node on a given port according to the specified
    configuration.

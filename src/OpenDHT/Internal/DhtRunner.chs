@@ -90,7 +90,7 @@ data CDhtSecureConfig = CDhtSecureConfig { _nodeConfigC :: CDhtNodeConfigPtr
                                          , _nodeIdC     :: CDhtIdentityPtr
                                          }
 
-{# pointer *dht_node_config as CDhtNodeConfigPtr -> CDhtNodeConfig #}
+{# pointer *wr_dht_node_config as CDhtNodeConfigPtr -> CDhtNodeConfig #}
 {# pointer *dht_identity    as CDhtIdentityPtr   -> CDhtIdentity   #}
 
 instance Storable CDhtSecureConfig where
@@ -131,7 +131,7 @@ data CDhtRunnerConfig = CDhtRunnerConfig { _dhtConfigC      :: CDhtSecureConfigP
                                          , _loggingC        :: Bool
                                          }
 
-{# pointer *dht_secure_config as CDhtSecureConfigPtr -> CDhtSecureConfig #}
+{# pointer *wr_dht_secure_config as CDhtSecureConfigPtr -> CDhtSecureConfig #}
 
 instance Storable CDhtRunnerConfig where
     sizeOf _    = {# sizeof wr_dht_runner_config  #}
