@@ -165,7 +165,7 @@ instance Default DhtSecureConfig where
 data DhtRunnerConfig = DhtRunnerConfig
   { _dhtConfig      :: DhtSecureConfig -- ^ The DHT config and SecureDhtRunner identity.
   , _threaded       :: Bool            -- ^ Whether OpenDHT should run in threaded mode (default: `True`)
-  , _proxyServer    :: String          -- ^ The proxy server hostname (defaullt: empty).
+  , _proxyServer    :: String          -- ^ The proxy server hostname (default: empty).
   , _pushNodeId     :: String          -- ^ A node id ([push notifications](https://github.com/savoirfairelinux/opendht/wiki/Push-notifications-support))
                                        --   (default: empty). This requires running with the proxy server.
   , _pushToken      :: String          -- ^ Push notification token (default: empty). This requires running with the proxy server.
