@@ -333,62 +333,63 @@ run port = do
   void $ liftIO $ dhtRunnerRunC (_dhtRunnerPtr dhtrunner) (fromIntegral port)
 
 withDhtRunnerConfig :: DhtRunnerConfig -> (Ptr CDhtRunnerConfig -> Dht a) -> Dht a
-withDhtRunnerConfig dhtConf dhtActionWithConfig = liftIO $ withCString (dhtConf^.proxyServer)
-  $ \ proxyServerPtr     -> withCString (dhtConf^.pushNodeId)
-  $ \ pushNodeIdPtr      -> withCString (dhtConf^.pushToken)
-  $ \ pushTokenPtr       -> withCString (dhtConf^.pushTopic)
-  $ \ pushTopicPtr       -> withCString (dhtConf^.pushPlatform)
-  $ \ pushPlatformPtr    -> alloca
-  $ \ clientIdentityPtr  -> alloca
-  $ \ dhtConfigPtr       -> alloca
-  $ \ nodeConfigPtr      -> alloca
-  $ \ nodeIdPtr          -> withCString (dhtConf^.dhtConfig.nodeConfig.persistPath)
-  $ \ persistPathPtr     -> withCInfohash
-  $ \ nodeIdHashPtr      -> withCString (show $ dhtConf^.dhtConfig.nodeConfig.nodeIdHash)
-  $ \ nodeIdHashStrPtr   -> alloca
-  $ \ dhtRunnerConfigPtr -> unDht $ do
-    (CCertificate serverCaPtr) <- Certificate.fromBytes $ dhtConf ^. serverCa
-    mClientIdentityPvkPtr      <- runMaybeT $ PrivateKey.fromBytes (dhtConf ^. clientIdentity . privatekey . pvkData)
-                                                                   (dhtConf ^. clientIdentity . privatekey . pvkPassword)
-    (CCertificate clientIdentityCertPtr) <- Certificate.fromBytes (dhtConf ^. clientIdentity . certificate)
-    mNodeIdentityPvkPtr                  <- runMaybeT $ PrivateKey.fromBytes (dhtConf ^. dhtConfig . nodeId . privatekey . pvkData)
-                                                                             (dhtConf ^. dhtConfig . nodeId . privatekey . pvkPassword)
-    (CCertificate nodeIdentityCertPtr) <- Certificate.fromBytes (dhtConf ^. dhtConfig . nodeId . certificate)
-    liftIO $ do
-      poke dhtConfigPtr $ CDhtSecureConfig { _nodeIdC     = nodeIdPtr
-                                           , _nodeConfigC = nodeConfigPtr
-                                           }
+withDhtRunnerConfig dhtConf dhtActionWithConfig = liftIO $
+    withCString (dhtConf^.proxyServer)                            $ \ proxyServerPtr     ->
+    withCString (dhtConf^.pushNodeId)                             $ \ pushNodeIdPtr      ->
+    withCString (dhtConf^.pushToken)                              $ \ pushTokenPtr       ->
+    withCString (dhtConf^.pushTopic)                              $ \ pushTopicPtr       ->
+    withCString (dhtConf^.pushPlatform)                           $ \ pushPlatformPtr    ->
+    alloca                                                        $ \ clientIdentityPtr  ->
+    alloca                                                        $ \ dhtConfigPtr       ->
+    alloca                                                        $ \ nodeConfigPtr      ->
+    alloca                                                        $ \ nodeIdPtr          ->
+    withCString (dhtConf^.dhtConfig.nodeConfig.persistPath)       $ \ persistPathPtr     ->
+    withCInfohash                                                 $ \ nodeIdHashPtr      ->
+    withCString (show $ dhtConf^.dhtConfig.nodeConfig.nodeIdHash) $ \ nodeIdHashStrPtr   ->
+    alloca                                                        $ \ dhtRunnerConfigPtr ->
+    unDht $ do
+      (CCertificate serverCaPtr) <- Certificate.fromBytes $ dhtConf ^. serverCa
+      mClientIdentityPvkPtr      <- runMaybeT $ PrivateKey.fromBytes (dhtConf ^. clientIdentity . privatekey . pvkData)
+                                                                     (dhtConf ^. clientIdentity . privatekey . pvkPassword)
+      (CCertificate clientIdentityCertPtr) <- Certificate.fromBytes (dhtConf ^. clientIdentity . certificate)
+      mNodeIdentityPvkPtr                  <- runMaybeT $ PrivateKey.fromBytes (dhtConf ^. dhtConfig . nodeId . privatekey . pvkData)
+                                                                               (dhtConf ^. dhtConfig . nodeId . privatekey . pvkPassword)
+      (CCertificate nodeIdentityCertPtr) <- Certificate.fromBytes (dhtConf ^. dhtConfig . nodeId . certificate)
+      liftIO $ do
+        poke dhtConfigPtr $ CDhtSecureConfig { _nodeIdC     = nodeIdPtr
+                                             , _nodeConfigC = nodeConfigPtr
+                                             }
 
-      poke nodeIdPtr $ CDhtIdentity { _privatekeyC  = maybe nullPtr _privateKeyPtr mNodeIdentityPvkPtr
-                                    , _certificateC = nodeIdentityCertPtr
-                                    }
+        poke nodeIdPtr $ CDhtIdentity { _privatekeyC  = maybe nullPtr _privateKeyPtr mNodeIdentityPvkPtr
+                                      , _certificateC = nodeIdentityCertPtr
+                                      }
 
-      dhtInfohashFromHexC nodeIdHashPtr nodeIdHashStrPtr
-      poke nodeConfigPtr $ CDhtNodeConfig { _persistPathC     = persistPathPtr
-                                          , _nodeIdHashC      = nodeIdHashPtr
-                                          , _networkC         = fromIntegral $ dhtConf ^. dhtConfig . nodeConfig . network
-                                          , _maintainStorageC = dhtConf ^. dhtConfig . nodeConfig . maintainStorage
-                                          , _isBootstrapC     = dhtConf ^. dhtConfig . nodeConfig . isBootstrap
-                                          }
-
-      poke clientIdentityPtr $ CDhtIdentity { _privatekeyC  = maybe nullPtr _privateKeyPtr mClientIdentityPvkPtr
-                                            , _certificateC = clientIdentityCertPtr
+        dhtInfohashFromHexC nodeIdHashPtr nodeIdHashStrPtr
+        poke nodeConfigPtr $ CDhtNodeConfig { _persistPathC     = persistPathPtr
+                                            , _nodeIdHashC      = nodeIdHashPtr
+                                            , _networkC         = fromIntegral $ dhtConf ^. dhtConfig . nodeConfig . network
+                                            , _maintainStorageC = dhtConf ^. dhtConfig . nodeConfig . maintainStorage
+                                            , _isBootstrapC     = dhtConf ^. dhtConfig . nodeConfig . isBootstrap
                                             }
 
-      poke dhtRunnerConfigPtr $ CDhtRunnerConfig { _dhtConfigC      = dhtConfigPtr
-                                                 , _threadedC       = dhtConf ^. threaded
-                                                 , _proxyServerC    = proxyServerPtr
-                                                 , _pushNodeIdC     = pushNodeIdPtr
-                                                 , _pushTokenC      = pushTokenPtr
-                                                 , _pushTopicC      = pushTopicPtr
-                                                 , _pushPlatformC   = pushPlatformPtr
-                                                 , _peerDiscoveryC  = dhtConf ^. peerDiscovery
-                                                 , _peerPublishC    = dhtConf ^. peerPublish
-                                                 , _serverCaC       = serverCaPtr
-                                                 , _clientIdentityC = clientIdentityPtr
-                                                 , _loggingC        = dhtConf ^. logging
-                                                 }
-    dhtActionWithConfig dhtRunnerConfigPtr
+        poke clientIdentityPtr $ CDhtIdentity { _privatekeyC  = maybe nullPtr _privateKeyPtr mClientIdentityPvkPtr
+                                              , _certificateC = clientIdentityCertPtr
+                                              }
+
+        poke dhtRunnerConfigPtr $ CDhtRunnerConfig { _dhtConfigC      = dhtConfigPtr
+                                                   , _threadedC       = dhtConf ^. threaded
+                                                   , _proxyServerC    = proxyServerPtr
+                                                   , _pushNodeIdC     = pushNodeIdPtr
+                                                   , _pushTokenC      = pushTokenPtr
+                                                   , _pushTopicC      = pushTopicPtr
+                                                   , _pushPlatformC   = pushPlatformPtr
+                                                   , _peerDiscoveryC  = dhtConf ^. peerDiscovery
+                                                   , _peerPublishC    = dhtConf ^. peerPublish
+                                                   , _serverCaC       = serverCaPtr
+                                                   , _clientIdentityC = clientIdentityPtr
+                                                   , _loggingC        = dhtConf ^. logging
+                                                   }
+      dhtActionWithConfig dhtRunnerConfigPtr
 
 foreign import ccall "wr_dht_runner_run_config" dhtRunnerRunConfigC :: CDhtRunnerPtr -> CShort -> Ptr CDhtRunnerConfig -> IO CInt
 
