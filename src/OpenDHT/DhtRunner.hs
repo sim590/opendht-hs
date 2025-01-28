@@ -154,8 +154,8 @@ instance Default DhtNodeConfig where
 
 {-| DHT node and security config.
 -}
-data DhtSecureConfig = DhtSecureConfig { _nodeConfig :: DhtNodeConfig
-                                       , _nodeId     :: DhtIdentity
+data DhtSecureConfig = DhtSecureConfig { _nodeConfig :: DhtNodeConfig -- ^ Low level DHT config parameters.
+                                       , _nodeId     :: DhtIdentity   -- ^ Node identity for handling DhtRunner's secure operations variants.
                                        }
 makeLenses ''DhtSecureConfig
 
@@ -163,7 +163,7 @@ instance Default DhtSecureConfig where
   def = DhtSecureConfig def def
 
 data DhtRunnerConfig = DhtRunnerConfig
-  { _dhtConfig      :: DhtSecureConfig
+  { _dhtConfig      :: DhtSecureConfig -- ^ The DHT config and SecureDhtRunner identity.
   , _threaded       :: Bool            -- ^ Whether OpenDHT should run in threaded mode (default: `True`)
   , _proxyServer    :: String          -- ^ The proxy server hostname (defaullt: empty).
   , _pushNodeId     :: String          -- ^ A node id ([push notifications](https://github.com/savoirfairelinux/opendht/wiki/Push-notifications-support))
@@ -174,7 +174,7 @@ data DhtRunnerConfig = DhtRunnerConfig
   , _peerDiscovery  :: Bool            -- ^ Use multicast to discover nodes announcing themselves (default: `False`).
   , _peerPublish    :: Bool            -- ^ Publish the DHT node through multicast in order to be discoverable by others (default: `False`).
   , _serverCa       :: BS.ByteString   -- ^ Proxy server X.509 certificate (default: empty).
-  , _clientIdentity :: DhtIdentity
+  , _clientIdentity :: DhtIdentity     -- ^ Proxy client certificate and private key structure.
   , _logging        :: Bool            -- ^ Enable logging (default: `False`).
   }
 makeLenses ''DhtRunnerConfig
