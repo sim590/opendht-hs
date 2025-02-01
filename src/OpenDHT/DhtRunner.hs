@@ -400,6 +400,22 @@ foreign import ccall "wr_dht_runner_run_config" dhtRunnerRunConfigC :: CDhtRunne
 
 {-| Run the OpenDHT node on a given port according to the specified
    configuration.
+
+   This module exposes lenses (see `Control.Lens`) for configuring easily every
+   field of the config datatype. Therefore, it's convinient to use `&` and `.~`
+   lens operators in order to set the config. This paired with the `Default`
+   instance of `DhtRunnerConfig` make it so that you can start from the default
+   config and build up a specific config in the following manner:
+
+   > myDhtConfig :: DhtRunnerConfig
+   > myDhtConfig = def
+   >   & logging                          .~ True
+   >   & proxyServer                      .~ "dhtproxy.jami.net:80"
+   >   & dhtConfig.nodeConfig.persistPath .~ "~/.opendht/dht.data"
+
+   For the full list of config lenses, see fields of `DhtRunnerConfig`,
+   `DhtSecureConfig`, `DhtNodeConfig` and `DhtIdentity`. The lists
+   for each datatype should follow the respective datatype.
 -}
 runConfig :: Word16          -- ^ The port on which to run the DHT node. Use @0@ to let the network layer decide.
           -> DhtRunnerConfig -- ^ The DhtRunner configuration.
