@@ -21,6 +21,7 @@ module OpenDHT.DhtRunner ( DhtRunner
                          , dhtRunner
                          , listenTokens
                          , OpToken
+                         , OpTokenMap
                          , DhtRunnerConfig (..)
                          , dhtConfig
                          -- , threaded
@@ -52,6 +53,7 @@ module OpenDHT.DhtRunner ( DhtRunner
                          , ShutdownCallback
                          , getNodeIdHash
                          , getPublicKeyID
+                         , getListenTokens
                          , run
                          , runConfig
                          , isRunning
@@ -115,9 +117,11 @@ newtype DhtRunner = DhtRunner { _dhtRunnerPtr :: CDhtRunnerPtr }
 newtype OpToken = OpToken { _opTokenPtr :: COpTokenPtr }
   deriving Eq
 
+type OpTokenMap = Map InfoHash [OpToken]
+
 data DhtRunnerState = DhtRunnerState
   { _dhtRunner    :: DhtRunner              -- ^ The DhtRunner.
-  , _listenTokens :: Map InfoHash [OpToken] -- ^ Map tracking the different Listen requests for every calls to `listen`
+  , _listenTokens :: OpTokenMap             -- ^ Map tracking the different Listen requests for every calls to `listen`
                                             --   according to their respective hash argument.
   }
 makeLenses ''DhtRunnerState
@@ -325,6 +329,11 @@ foreign import ccall "wr_dht_runner_get_id" dhtRunnerGetIdC :: CDhtRunnerPtr -> 
 -}
 getPublicKeyID :: DhtRunnerM Dht InfoHash
 getPublicKeyID = infohashFromDhtRunner dhtRunnerGetIdC
+
+{-| Access to the current listen OpToken map (see `listen` and `cancelListen` for more info).
+-}
+getListenTokens :: DhtRunnerM Dht OpTokenMap
+getListenTokens = use listenTokens
 
 foreign import ccall "dht_runner_run" dhtRunnerRunC :: CDhtRunnerPtr -> CInt -> IO CInt
 
