@@ -23,7 +23,7 @@ module OpenDHT.DhtRunner ( DhtRunner
                          , OpToken
                          , DhtRunnerConfig (..)
                          , dhtConfig
-                         , threaded
+                         -- , threaded
                          , proxyServer
                          , pushNodeId
                          , pushToken
@@ -164,7 +164,11 @@ instance Default DhtSecureConfig where
 
 data DhtRunnerConfig = DhtRunnerConfig
   { _dhtConfig      :: DhtSecureConfig -- ^ The DHT config and SecureDhtRunner identity.
-  , _threaded       :: Bool            -- ^ Whether OpenDHT should run in threaded mode (default: `True`)
+
+  -- This option doesn't seem to have a useful
+  -- purpose. Or I don't know who to use it.
+  -- , _threaded       :: Bool            -- ^ Whether OpenDHT should run in threaded mode (default: `True`)
+
   , _proxyServer    :: String          -- ^ The proxy server hostname (default: empty).
   , _pushNodeId     :: String          -- ^ A node id ([push notifications](https://github.com/savoirfairelinux/opendht/wiki/Push-notifications-support))
                                        --   (default: empty). This requires running with the proxy server.
@@ -181,7 +185,7 @@ makeLenses ''DhtRunnerConfig
 
 instance Default DhtRunnerConfig where
   def = DhtRunnerConfig { _dhtConfig      = def
-                        , _threaded       = True
+                        -- , _threaded       = True
                         , _proxyServer    = ""
                         , _pushNodeId     = ""
                         , _pushToken      = ""
@@ -377,7 +381,8 @@ withDhtRunnerConfig dhtConf dhtActionWithConfig = liftIO $
                                             }
 
       poke dhtRunnerConfigPtr $ CDhtRunnerConfig { _dhtConfigC      = dhtConfigPtr
-                                                 , _threadedC       = dhtConf ^. threaded
+                                                 -- , _threadedC       = dhtConf ^. threaded
+                                                 , _threadedC       = True
                                                  , _proxyServerC    = proxyServerPtr
                                                  , _pushNodeIdC     = pushNodeIdPtr
                                                  , _pushTokenC      = pushTokenPtr
