@@ -39,6 +39,7 @@ library
                         bytestring ^>= 0.11.5,
                         transformers,
                         containers,
+                        stm,
                         mtl,
                         lens,
                         data-default

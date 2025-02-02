@@ -80,11 +80,9 @@ import Control.Monad
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Class
 import Control.Monad.IO.Class
-import Control.Monad.State ( StateT
-                           , MonadState
-                           , execStateT
-                           )
-import qualified Control.Monad.State as ST
+import Control.Monad.Reader
+import Control.Concurrent.STM.TVar
+import Control.Concurrent.STM
 import Control.Concurrent.MVar
 
 import Foreign.Ptr
@@ -207,8 +205,8 @@ instance Default DhtRunnerConfig where
 
    This type should be used in conjunction with `runDhtRunnerM`.
 -}
-newtype DhtRunnerM m a = DhtRunnerM { unwrapDhtRunnerM :: StateT DhtRunnerState m a }
-  deriving (Functor, Applicative, Monad, MonadIO, MonadState DhtRunnerState)
+newtype DhtRunnerM m a = DhtRunnerM { unwrapDhtRunnerM :: ReaderT (TVar DhtRunnerState) m a }
+  deriving (Functor, Applicative, Monad, MonadIO, MonadReader (TVar DhtRunnerState))
 
 instance MonadTrans DhtRunnerM where
   lift = DhtRunnerM . lift
@@ -301,17 +299,32 @@ runDhtRunnerM :: Storable userdata
                                            --   `ShutdownCallback` to terminate.
               -> DhtRunnerM Dht ()         -- ^ The `DhtRunnerM` action.
               -> IO ()
-runDhtRunnerM scb userdata mv runnerAction = unDht $ do
-  dhtrunner <- initialize
-  s         <- execStateT (unwrapDhtRunnerM (runnerAction >> shutdown scb userdata)) (DhtRunnerState dhtrunner Map.empty)
-  liftIO $ putMVar mv ()
+runDhtRunnerM scb userdata mv runnerAction = unDht $ initialize >>= \ dhtrunner -> do
+  let
+    initialDhtRunnerState = DhtRunnerState { _dhtRunner       = dhtrunner
+                                           , _listenTokens    = Map.empty
+                                           }
+  dhtRunnerStateTV <- liftIO $ newTVarIO initialDhtRunnerState
+  runReaderT (unwrapDhtRunnerM (runnerAction >> shutdown scb userdata)) dhtRunnerStateTV
+
   delete dhtrunner
-  forM_ (Map.toList (s^.listenTokens) ^. traverse . _2) deleteOpToken
+  liftIO $ putMVar mv () -- waiting for shutdown
+
+  let emptyDhtRunnerState = DhtRunnerState { _dhtRunner       = DhtRunner nullPtr
+                                           , _listenTokens    = Map.empty
+                                           }
+  finalDhtRunnerState <- liftIO $ atomically $ swapTVar dhtRunnerStateTV emptyDhtRunnerState
+  forM_ (Map.toList (finalDhtRunnerState^.listenTokens) ^. traverse . _2) deleteOpToken
+
+{-| Atomically get DhtRunner from TVar state
+-}
+getDhtRunner :: DhtRunnerM Dht DhtRunner
+getDhtRunner = ask >>= liftIO . readTVarIO <&> _dhtRunner
 
 {-| Boiler plate code for getNodeId, getPublicKeyID.
 -}
 infohashFromDhtRunner :: (CDhtRunnerPtr -> CInfoHashPtr -> IO ()) -> DhtRunnerM Dht InfoHash
-infohashFromDhtRunner f = (use dhtRunner >>= fromDhtRunner) <&> InfoHash
+infohashFromDhtRunner f = getDhtRunner >>= fromDhtRunner <&> InfoHash
   where fromDhtRunner dhtrunner = liftIO $ withCInfohash $ \ hPtr -> do
           f (_dhtRunnerPtr dhtrunner) hPtr
           infoHashToString hPtr
@@ -333,7 +346,7 @@ getPublicKeyID = infohashFromDhtRunner dhtRunnerGetIdC
 {-| Access to the current listen OpToken map (see `listen` and `cancelListen` for more info).
 -}
 getListenTokens :: DhtRunnerM Dht OpTokenMap
-getListenTokens = use listenTokens
+getListenTokens = ask >>= liftIO . readTVarIO <&> _listenTokens
 
 foreign import ccall "dht_runner_run" dhtRunnerRunC :: CDhtRunnerPtr -> CInt -> IO CInt
 
@@ -342,7 +355,7 @@ foreign import ccall "dht_runner_run" dhtRunnerRunC :: CDhtRunnerPtr -> CInt -> 
 run :: Word16 -- ^ The port on which to run the DHT node. Use @0@ to let the network layer decide.
     -> DhtRunnerM Dht ()
 run port = do
-  dhtrunner <- use dhtRunner
+  dhtrunner <- getDhtRunner
   void $ liftIO $ dhtRunnerRunC (_dhtRunnerPtr dhtrunner) (fromIntegral port)
 
 withDhtRunnerConfig :: DhtRunnerConfig -> (Ptr CDhtRunnerConfig -> Dht a) -> Dht a
@@ -430,7 +443,7 @@ runConfig :: Word16          -- ^ The port on which to run the DHT node. Use @0@
           -> DhtRunnerConfig -- ^ The DhtRunner configuration.
           -> DhtRunnerM Dht ()
 runConfig port config = do
-  dhtrunner <- use dhtRunner
+  dhtrunner <- getDhtRunner
   lift $ withDhtRunnerConfig config $ \ configPtr -> do
     void $ liftIO $ dhtRunnerRunConfigC (_dhtRunnerPtr dhtrunner) (fromIntegral port) configPtr
 
@@ -440,7 +453,7 @@ foreign import ccall "dht_runner_is_running" dhtRunnerIsRunningC :: CDhtRunnerPt
    after calling `run` or `runConfig`.
 -}
 isRunning :: DhtRunnerM Dht Bool
-isRunning = use dhtRunner >>= liftIO . (toBool <$>) . dhtRunnerIsRunningC . _dhtRunnerPtr
+isRunning = getDhtRunner >>= liftIO . (toBool <$>) . dhtRunnerIsRunningC . _dhtRunnerPtr
 
 foreign import ccall "dht_runner_bootstrap" dhtRunnerBootstrapC :: CDhtRunnerPtr -> Ptr CChar -> Ptr CChar -> IO ()
 
@@ -450,7 +463,7 @@ bootstrap :: String -- ^ The hostname (or IP address) used to bootstrap the conn
           -> String -- ^ The remote bootstrapping node port to use to connect.
           -> DhtRunnerM Dht ()
 bootstrap addr port = do
-  dhtrunner <- use dhtRunner
+  dhtrunner <- getDhtRunner
   liftIO $ withCString addr $ \ addrCPtr ->
            withCString port $ \ portCPtr -> dhtRunnerBootstrapC (_dhtRunnerPtr dhtrunner) addrCPtr portCPtr
 
@@ -465,7 +478,7 @@ get :: Storable userdata
     -> DoneCallback userdata -- ^ The callback invoked when OpenDHT has completed the get request.
     -> userdata              -- ^ Some user data to be passed to callbacks.
     -> DhtRunnerM Dht ()
-get h gcb dcb userdata = use dhtRunner >>= \ dhtrunner -> liftIO $ do
+get h gcb dcb userdata = getDhtRunner >>= \ dhtrunner -> liftIO $ do
   withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
     dhtInfohashFromHexC hPtr hStrPtr
     gcbCWrapped <- wrapGetCallbackC $ fromGetCallBack gcb
@@ -486,14 +499,14 @@ put :: Storable userdata
                              --   reannounced automatically after it has expired (after 10 minutes). __NOTE__: This requires
                              --   node to keep running.
     -> DhtRunnerM Dht ()
-put _ (StoredValue {}) _ _ _                           = error "DhtRunner.put needs to be fed an InputValue!"
-put h (InputValue vbs usertype) dcb userdata permanent = use dhtRunner >>= \ dhtrunner -> liftIO $ do
+put h (InputValue vbs usertype) dcb userdata permanent = getDhtRunner >>= \ dhtrunner -> liftIO $ do
   withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
     dhtInfohashFromHexC hPtr hStrPtr
     dcbCWrapped <- wrapDoneCallbackC $ fromDoneCallback dcb
     vPtr <- unDht $ valuePtrFromBytes vbs
     unDht $ setValueUserType vPtr usertype
     dhtRunnerPutC (_dhtRunnerPtr dhtrunner) hPtr vPtr dcbCWrapped userdataPtr (fromBool permanent)
+put _ _ _ _ _ = error "DhtRunner.put needs to be fed an InputValue!"
 
 foreign import ccall "dht_runner_listen"
   dhtRunnerListenC :: CDhtRunnerPtr -> CInfoHashPtr -> FunPtr (CValueCallback a) -> FunPtr (CShutdownCallback a) -> Ptr a -> IO (Ptr ())
@@ -509,7 +522,7 @@ foreign import ccall "dht_runner_cancel_put" dhtRunnerCancelPutC :: CDhtRunnerPt
 cancelPut :: InfoHash -- ^ The hash for which the value was first put.
           -> Word64   -- ^ The value ID.
           -> DhtRunnerM Dht ()
-cancelPut h vid = use dhtRunner >>= \ dhtrunner -> liftIO $ do
+cancelPut h vid = getDhtRunner >>= \ dhtrunner -> liftIO $ do
   withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> do
     dhtInfohashFromHexC hPtr hStrPtr
     dhtRunnerCancelPutC (_dhtRunnerPtr dhtrunner) hPtr (CULLong vid)
@@ -530,17 +543,19 @@ listen :: Storable userdata
        -> userdata                  -- ^ User data to pass to the callback.
        -> DhtRunnerM Dht ()
 listen h vcb scb userdata = do
-  dhtrunner <- use dhtRunner
-  tokensMap <- use listenTokens
+  dhtrunner <- getDhtRunner
   t <- liftIO $ do
     withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
       dhtInfohashFromHexC hPtr hStrPtr
       vcbCWrapped <- wrapValueCallbackC $ fromValueCallBack vcb
       scbCWrapped <- wrapShutdownCallbackC $ fromShutdownCallback scb
       OpToken <$> dhtRunnerListenC (_dhtRunnerPtr dhtrunner) hPtr vcbCWrapped scbCWrapped userdataPtr
-  let mtokens   = tokensMap ^.at h
+  dhtRunnerStateTV <- ask
+  liftIO $ atomically $ modifyTVar dhtRunnerStateTV $ \ s ->
+    let
+      mtokens   = s ^. listenTokens . at h
       newTokens = maybe [t] (t:) mtokens
-  listenTokens %= Map.insert h newTokens
+     in s & listenTokens %~ Map.insert h newTokens
 
 foreign import ccall "dht_runner_cancel_listen" dhtRunnerCancelListenC :: CDhtRunnerPtr -> CInfoHashPtr -> COpTokenPtr -> IO ()
 
@@ -552,18 +567,26 @@ foreign import ccall "dht_runner_cancel_listen" dhtRunnerCancelListenC :: CDhtRu
 cancelListen :: InfoHash -- ^ The hash for which the Listen request was previously issued.
              -> OpToken  -- ^ The token associated identifying the exact Listen operation.
              -> MaybeT (DhtRunnerM Dht) ()
-cancelListen h t = do
-  dhtrunner <- lift $ use dhtRunner
-  tokensMap <- lift $ use listenTokens
-  tokens    <- MaybeT $ return $ tokensMap ^.at h
-  i         <- MaybeT $ return $ List.elemIndex t tokens
-  case splitAt i tokens of
-    (beg, t':rest) -> do
-      liftIO $ withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> do
-        dhtInfohashFromHexC hPtr hStrPtr
-        dhtRunnerCancelListenC (_dhtRunnerPtr dhtrunner) hPtr (_opTokenPtr t')
-      lift $ listenTokens %= Map.insert h (beg++rest)
-    (_, [])        -> error "cancelListen: the token list should not have been empty."
+cancelListen h t = lift getDhtRunner >>= \ dhtrunner -> do
+  liftIO $ withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> do
+    dhtInfohashFromHexC hPtr hStrPtr
+    dhtRunnerCancelListenC (_dhtRunnerPtr dhtrunner) hPtr (_opTokenPtr t)
+
+  dhtRunnerStateTV <- ask
+  let
+    withTokenOrNothing tmap = do
+      tokens <- tmap ^. at h
+      i      <- List.elemIndex t tokens
+      case splitAt i tokens of
+        (beg, _:end) -> return (beg, end)
+        (_, [])      -> error "cancelListen: the token list should not have been empty."
+
+  liftIO $ atomically $ modifyTVar dhtRunnerStateTV $ \ s@(DhtRunnerState _ ltokens) ->
+    let
+      mSplitAtToken          = withTokenOrNothing ltokens
+      newTokens (beg, _:end) = s & listenTokens %~ Map.insert h (beg++end)
+      newTokens _            = s
+     in maybe s newTokens mSplitAtToken
 
 foreign import ccall "dht_runner_shutdown" dhtRunnerShutdownC :: CDhtRunnerPtr -> FunPtr (CShutdownCallback a) -> Ptr a -> IO ()
 
@@ -575,7 +598,7 @@ shutdown :: Storable userdata
          -> userdata                  -- ^ User data to pass to the callback.
          -> DhtRunnerM Dht ()
 shutdown scb userdata = do
-  dhtrunner <- use dhtRunner
+  dhtrunner <- getDhtRunner
   liftIO $ with userdata $ \ userdataPtr -> do
     scbCWrapped <- wrapShutdownCallbackC $ fromShutdownCallback scb
     dhtRunnerShutdownC (_dhtRunnerPtr dhtrunner) scbCWrapped userdataPtr
