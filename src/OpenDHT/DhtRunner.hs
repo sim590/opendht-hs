@@ -7,7 +7,7 @@
 
   Maintainer  : sim.desaulniers@gmail.com
 
-  This encapsulates functions and datatypes for manipulating an OpenDHT node. In
+  This encapsulates functions and data types for manipulating an OpenDHT node. In
   OpenDHT, a node is used through the class @DhtRunner@. This module exposes this
   class' functions.
 -}
@@ -15,11 +15,12 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module OpenDHT.DhtRunner ( DhtRunner
+module OpenDHT.DhtRunner ( -- * The DhtRunnerM monad
+                           DhtRunner
                          , DhtRunnerM
                          , runDhtRunnerM
-                         , OpToken
-                         , OpTokenMap
+                         -- * Configuration
+                         -- ** Main options
                          , DhtRunnerConfig (..)
                          , dhtConfig
                          -- , threaded
@@ -33,29 +34,37 @@ module OpenDHT.DhtRunner ( DhtRunner
                          , serverCa
                          , clientIdentity
                          , logging
+                         -- ** Security
                          , DhtSecureConfig (..)
                          , nodeConfig
                          , nodeId
+                         , DhtIdentity (..)
+                         , privatekey
+                         , certificate
+                         -- ** DHT options
                          , DhtNodeConfig (..)
                          , nodeIdHash
                          , network
                          , isBootstrap
                          , maintainStorage
                          , persistPath
-                         , DhtIdentity (..)
-                         , privatekey
-                         , certificate
+                         -- * Callbacks
                          , GetCallback
                          , ValueCallback
                          , DoneCallback
                          , ShutdownCallback
+                         -- * Accessors
+                         , OpToken
+                         , OpTokenMap
                          , getNodeIdHash
                          , getPublicKeyID
                          , getListenTokens
+                         -- * Initialization
                          , run
                          , runConfig
                          , isRunning
                          , bootstrap
+                         -- * DHT operations
                          , get
                          , put
                          , cancelPut
@@ -113,6 +122,8 @@ newtype DhtRunner = DhtRunner { _dhtRunnerPtr :: CDhtRunnerPtr }
 newtype OpToken = OpToken { _opTokenPtr :: COpTokenPtr }
   deriving Eq
 
+{-| Map of `OpToken` by `InfoHash` location.
+-}
 type OpTokenMap = Map InfoHash [OpToken]
 
 data DhtRunnerState = DhtRunnerState
@@ -422,7 +433,7 @@ foreign import ccall "wr_dht_runner_run_config" dhtRunnerRunConfigC :: CDhtRunne
    configuration.
 
    This module exposes lenses (see `Control.Lens`) for configuring easily every
-   field of the config datatype. Therefore, it's convinient to use `&` and `.~`
+   field of the config data type. Therefore, it's convinient to use `&` and `.~`
    lens operators in order to set the config. This paired with the `Default`
    instance of `DhtRunnerConfig` make it so that you can start from the default
    config and build up a specific config in the following manner:
@@ -435,7 +446,7 @@ foreign import ccall "wr_dht_runner_run_config" dhtRunnerRunConfigC :: CDhtRunne
 
    For the full list of config lenses, see fields of `DhtRunnerConfig`,
    `DhtSecureConfig`, `DhtNodeConfig` and `DhtIdentity`. The lists
-   for each datatype should follow the respective datatype.
+   for each data type should follow the respective data type.
 -}
 runConfig :: Word16          -- ^ The port on which to run the DHT node. Use @0@ to let the network layer decide.
           -> DhtRunnerConfig -- ^ The DhtRunner configuration.
