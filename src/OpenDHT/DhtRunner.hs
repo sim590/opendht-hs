@@ -131,10 +131,10 @@ newtype OpToken = OpToken { _opTokenPtr :: COpTokenPtr }
 type OpTokenMap = Map InfoHash [OpToken]
 
 data DhtRunnerState = DhtRunnerState
-  { _dhtRunner    :: DhtRunner  -- ^ The DhtRunner.
-  , _listenTokens :: OpTokenMap -- ^ Map tracking the different Listen requests for every calls to `listen`
-                                --   according to their respective hash argument.
-  , _permanentValues :: [Value] -- ^ List of permanently put values.
+  { _dhtRunner       :: DhtRunner  -- ^ The DhtRunner.
+  , _listenTokens    :: OpTokenMap -- ^ Map tracking the different Listen requests for every calls to `listen`
+                                   -- according to their respective hash argument.
+  , _permanentValues :: [Value]    -- ^ List of permanently put values (constructed with MetaValue, so no data).
   }
 makeLenses ''DhtRunnerState
 
@@ -527,14 +527,17 @@ foreign import ccall "dht_runner_put"
   dhtRunnerPutC :: CDhtRunnerPtr -> CInfoHashPtr -> CValuePtr -> FunPtr CDoneCallback -> Ptr () -> CBool -> IO ()
 
 {-| Put a `Value` on the DHT for a given hash.
+
+   The ID of the value that was put on the network. This serves to cancel a
+   permanent put later on.
 -}
 put :: InfoHash     -- ^ The hash under which to store the value.
     -> Value        -- ^ The value to put on the DHT.
     -> DoneCallback -- ^ The callback to invoke when the request is completed (or has failed).
     -> Bool         -- ^ Whether the value should be "permanent". A permanent value is
-                    -- reannounced automatically after it has expired (after 10 minutes). __NOTE__: This requires
-                    -- node to keep running.
-    -> DhtRunnerM Dht ()
+                    --   reannounced automatically after it has expired (after 10 minutes).
+                    --   __NOTE__: This requires node to keep running.
+    -> DhtRunnerM Dht Word64
 put h (InputValue vbs usertype) dcb permanent = ask >>= \ dhtRunnerStateTV -> do
   dhtrunner <- getDhtRunner
   liftIO $ withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with () $ \ userdataPtr -> do
@@ -549,15 +552,16 @@ put h (InputValue vbs usertype) dcb permanent = ask >>= \ dhtRunnerStateTV -> do
       return vPtr'
     unDht $ setValueUserType vPtr usertype
     dhtRunnerPutC (_dhtRunnerPtr dhtrunner) hPtr vPtr dcbCWrapped userdataPtr (fromBool permanent)
+    return randomVID
 put _ _ _ _ = error "DhtRunner.put needs to be fed an InputValue!"
 
 foreign import ccall "dht_runner_cancel_put" dhtRunnerCancelPutC :: CDhtRunnerPtr -> CInfoHashPtr -> CULLong -> IO ()
 
 {-| Cancel a Put request.
 
-  This function is useful for cancelling a "permanent" Put request. Therefore,
-  if the user puts a permanent value on the network, he should think about
-  storing the value ID then.
+  The `DhtRunnerM` monad automatically tracks the permanently put values. In
+  order to cancel one, the user can call `getPermanentMetaValues` to get the ID
+  of the value he wants to cancel.
 -}
 cancelPut :: InfoHash -- ^ The hash for which the value was first put.
           -> Word64   -- ^ The value ID.
