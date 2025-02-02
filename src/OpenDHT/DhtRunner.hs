@@ -582,14 +582,14 @@ listen :: Storable userdata
        -> ValueCallback userdata    -- ^ The callback to invoke when a value is found or has expired.
        -> ShutdownCallback userdata -- ^ The callback to invoke before the OpenDHT node shuts down.
        -> userdata                  -- ^ User data to pass to the callback.
-       -> DhtRunnerM Dht ()
+       -> DhtRunnerM Dht OpToken
 listen h vcb scb userdata = ask >>= \ dhtRunnerStateTV -> do
   dhtrunner <- getDhtRunner
   tokenTVar <- liftIO $ newTVarIO Nothing
   token <- liftIO $ do
     withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
       dhtInfohashFromHexC hPtr hStrPtr
-      vcbCWrapped <- wrapValueCallbackC $ fromValueCallBack h tokenTVar dhtRunnerStateTV vcb
+      vcbCWrapped <- wrapValueCallbackC    $ fromValueCallBack h tokenTVar dhtRunnerStateTV vcb
       scbCWrapped <- wrapShutdownCallbackC $ fromShutdownCallback scb
       t <- OpToken <$> dhtRunnerListenC (_dhtRunnerPtr dhtrunner) hPtr vcbCWrapped scbCWrapped userdataPtr
       atomically $ writeTVar tokenTVar (Just t)
@@ -599,6 +599,7 @@ listen h vcb scb userdata = ask >>= \ dhtRunnerStateTV -> do
       mtokens   = s ^. listenTokens . at h
       newTokens = maybe [token] (token:) mtokens
      in s & listenTokens %~ Map.insert h newTokens
+  return token
 
 foreign import ccall "dht_runner_cancel_listen" dhtRunnerCancelListenC :: CDhtRunnerPtr -> CInfoHashPtr -> COpTokenPtr -> IO ()
 
