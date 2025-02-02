@@ -257,16 +257,16 @@ deleteListenToken :: InfoHash       -- ^ The `InfoHash` where the Listen request
                   -> OpToken        -- ^ The `OpToken` to delete from the Map.
                   -> DhtRunnerState -- ^ The `DhtRunnerState` to change.
                   -> DhtRunnerState
-deleteListenToken h token s@(DhtRunnerState _ ltokens) = maybe s newTokens mSplitAtToken
+deleteListenToken h token s@(DhtRunnerState _ ltokens) = maybe s fromNewTokens mSplitAtToken
   where
     mSplitAtToken           = withTokenOrNothing ltokens
-    newTokens (beg, _:end)  = s & listenTokens %~ Map.insert h (beg++end)
-    newTokens _             = s
+    fromNewTokens []        = s & listenTokens %~ Map.delete h
+    fromNewTokens newTokens = s & listenTokens %~ Map.insert h newTokens
     withTokenOrNothing tmap = do
       tokens <- tmap ^. at h
       i      <- List.elemIndex token tokens
       case splitAt i tokens of
-        (beg, _:end) -> return (beg, end)
+        (beg, _:end) -> return $ beg ++ end
         (_, [])      -> error "cancelListen: the token list should not have been empty."
 
 fromGetCallBack :: Storable t => GetCallback t -> CGetCallback t
