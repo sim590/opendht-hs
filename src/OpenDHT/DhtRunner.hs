@@ -18,8 +18,6 @@
 module OpenDHT.DhtRunner ( DhtRunner
                          , DhtRunnerM
                          , runDhtRunnerM
-                         , dhtRunner
-                         , listenTokens
                          , OpToken
                          , OpTokenMap
                          , DhtRunnerConfig (..)
