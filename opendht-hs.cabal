@@ -42,7 +42,8 @@ library
                         stm,
                         mtl,
                         lens,
-                        data-default
+                        data-default,
+                        random
     build-tool-depends: c2hs:c2hs
     pkgconfig-depends:  opendht-c
     hs-source-dirs:     src

@@ -73,6 +73,8 @@ module OpenDHT.DhtRunner ( -- * The DhtRunnerM monad
                          , cancelListen
                          ) where
 
+import System.Random
+
 import Data.Maybe
 import Data.Default
 import Data.Word
@@ -554,8 +556,9 @@ put h (InputValue vbs usertype) dcb userdata permanent = ask >>= \ dhtRunnerStat
   liftIO $ withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
     dhtInfohashFromHexC hPtr hStrPtr
     dcbCWrapped <- wrapDoneCallbackC $ fromDoneCallback dcb
+    randomVID <- randomIO
     vPtr <- unDht $ do
-      vPtr' <- valuePtrFromBytes vbs
+      vPtr' <- valuePtrFromBytes vbs randomVID
       metav <- metaValueFromCValuePtr vPtr'
       when permanent $ liftIO $ atomically $
         modifyTVar dhtRunnerStateTV $ \ s -> s & permanentValues %~ (metav:)
