@@ -229,31 +229,27 @@ instance MonadTrans DhtRunnerM where
    Get (`get`) request. This callback shall return a boolean indicating whether to
    stop the Get request or not.
 -}
-type GetCallback  a = Value -- ^ A value found for the asked hash.
-                   -> a     -- ^ User data passed from the initial call to `get`.
-                   -> IO Bool
+type GetCallback = Value -- ^ A value found for the asked hash.
+                -> IO Bool
 
 {-| Callback invoked whenever a `Value` is retrieved on the DHT during a Listen
    (`listen`) request. This callback shall be called once when a value is found
    and once when this same value has expired on the network. Finally, it returns a
    boolean indicating whether to stop the Listen request or not.
 -}
-type ValueCallback a = Value -- ^ A value found for the asked hash.
-                    -> Bool  -- ^ Whether the value is expired or not.
-                    -> a     -- ^ User data passed from the initial call to `listen`.
-                    -> IO Bool
+type ValueCallback = Value -- ^ A value found for the asked hash.
+                  -> Bool  -- ^ Whether the value is expired or not.
+                  -> IO Bool
 
 {-| The generic callback invoked for all asynchronous operations when those
    terminate.
 -}
-type DoneCallback a = Bool -- ^ A boolean indicating whether the operation was successful or not.
-                   -> a    -- ^ User data passed from the initial call to the function.
-                   -> IO ()
+type DoneCallback = Bool -- ^ A boolean indicating whether the operation was successful or not.
+                 -> IO ()
 
 {-| A callback invoked before the Dhtnode is shutdown.
 -}
-type ShutdownCallback a = a -- ^ User data passed from the initial call to the function.
-                       -> IO ()
+type ShutdownCallback = IO ()
 
 {-| Delete the `OpToken` inside the `DhtRunnerState` of DhtRunnerM.
 -}
@@ -273,40 +269,34 @@ deleteListenToken h token s@(DhtRunnerState _ ltokens _) = maybe s fromNewTokens
         (beg, _:end) -> return $ beg ++ end
         (_, [])      -> error "cancelListen: the token list should not have been empty."
 
-fromGetCallBack :: Storable t => GetCallback t -> CGetCallback t
-fromGetCallBack gcb vPtr userdataPtr = do
-  udata <- peek userdataPtr
-  v     <- unDht $ storedValueFromCValuePtr vPtr
-  fromBool <$> gcb v udata
+fromGetCallBack :: GetCallback -> CGetCallback
+fromGetCallBack gcb vPtr _ = do
+  v <- unDht $ storedValueFromCValuePtr vPtr
+  fromBool <$> gcb v
 
-fromValueCallBack :: Storable t
-                  => InfoHash              -- ^ The InfoHash for which the Listen request was made.
+fromValueCallBack :: InfoHash              -- ^ The InfoHash for which the Listen request was made.
                   -> TVar (Maybe OpToken)  -- ^ Shared memory location for the token yielded by the Listen request. This
                                            --   function should block until the content of the TVar is different than
                                            --   Nothing.
                   -> TVar DhtRunnerState   -- ^ Shared memory location for the `DhtRunnerConfig`.
-                  -> ValueCallback t       -- ^ The user's ValueCallback to wrap.
-                  -> CValueCallback t
-fromValueCallBack h tTVar dhtStateTV vcb vPtr expired userdataPtr = do
+                  -> ValueCallback         -- ^ The user's ValueCallback to wrap.
+                  -> CValueCallback
+fromValueCallBack h tTVar dhtStateTV vcb vPtr expired _ = do
   token <- atomically $ do
     mt <- readTVar tTVar
     check $ isJust mt
     return $ fromJust mt
-  udata      <- peek userdataPtr
   v          <- unDht $ storedValueFromCValuePtr vPtr
-  toContinue <- vcb v (toBool expired) udata
+  toContinue <- vcb v (toBool expired)
   unless toContinue $ atomically $ modifyTVar dhtStateTV $ deleteListenToken h token
   return $ fromBool toContinue
 
-fromDoneCallback :: Storable t => DoneCallback t -> CDoneCallback t
-fromDoneCallback dcb successC userdataPtr = do
-  udata <- peek userdataPtr
-  dcb (toBool successC) udata
+fromDoneCallback :: DoneCallback -> CDoneCallback
+fromDoneCallback dcb successC _ = do
+  dcb (toBool successC)
 
-fromShutdownCallback :: Storable t => ShutdownCallback t -> CShutdownCallback t
-fromShutdownCallback scb userdataPtr = do
-  udata <- peek userdataPtr
-  scb udata
+fromShutdownCallback :: ShutdownCallback -> CShutdownCallback
+fromShutdownCallback = const
 
 foreign import ccall "dht_runner_new" dhtRunnerNewC :: IO CDhtRunnerPtr
 
@@ -337,21 +327,19 @@ deleteOpToken = liftIO . dhtOpTokenDeleteC . _opTokenPtr
    terminate while DHT operations are still susceptible to occur for the
    application.
 -}
-runDhtRunnerM :: Storable userdata
-              => ShutdownCallback userdata -- ^ A callback to run before shutting down the DHT node.
-              -> userdata                  -- ^ User data to pass to the `ShutdownCallback`.
-              -> MVar ()                   -- ^ Synchronizing variable used to block while waiting on the
-                                           --   `ShutdownCallback` to terminate.
-              -> DhtRunnerM Dht ()         -- ^ The `DhtRunnerM` action.
+runDhtRunnerM :: ShutdownCallback  -- ^ A callback to run before shutting down the DHT node.
+              -> MVar ()           -- ^ Synchronizing variable used to block while waiting on the
+                                   --   `ShutdownCallback` to terminate.
+              -> DhtRunnerM Dht () -- ^ The `DhtRunnerM` action.
               -> IO ()
-runDhtRunnerM scb userdata mv runnerAction = unDht $ initialize >>= \ dhtrunner -> do
+runDhtRunnerM scb mv runnerAction = unDht $ initialize >>= \ dhtrunner -> do
   let
     initialDhtRunnerState = DhtRunnerState { _dhtRunner       = dhtrunner
                                            , _listenTokens    = Map.empty
                                            , _permanentValues = []
                                            }
   dhtRunnerStateTV <- liftIO $ newTVarIO initialDhtRunnerState
-  runReaderT (unwrapDhtRunnerM (runnerAction >> shutdown scb userdata)) dhtRunnerStateTV
+  runReaderT (unwrapDhtRunnerM (runnerAction >> shutdown scb)) dhtRunnerStateTV
   liftIO $ putMVar mv () -- waiting for shutdown
 
   delete dhtrunner
@@ -520,40 +508,36 @@ bootstrap addr port = do
            withCString port $ \ portCPtr -> dhtRunnerBootstrapC (_dhtRunnerPtr dhtrunner) addrCPtr portCPtr
 
 foreign import ccall "dht_runner_get"
-  dhtRunnerGetC :: CDhtRunnerPtr -> CInfoHashPtr  -> FunPtr (CGetCallback a) -> FunPtr (CDoneCallback a) -> Ptr a -> IO ()
+  dhtRunnerGetC :: CDhtRunnerPtr -> CInfoHashPtr  -> FunPtr CGetCallback -> FunPtr CDoneCallback -> Ptr () -> IO ()
 
 {-| Get a `Value` pointed at by a given hash on the DHT.
 -}
-get :: Storable userdata
-    => InfoHash              -- ^ The hash for which to get data at.
-    -> GetCallback userdata  -- ^ The callback invoked for all values retrieved on the DHT for the given hash.
-    -> DoneCallback userdata -- ^ The callback invoked when OpenDHT has completed the get request.
-    -> userdata              -- ^ Some user data to be passed to callbacks.
+get :: InfoHash     -- ^ The hash for which to get data at.
+    -> GetCallback  -- ^ The callback invoked for all values retrieved on the DHT for the given hash.
+    -> DoneCallback -- ^ The callback invoked when OpenDHT has completed the get request.
     -> DhtRunnerM Dht ()
-get h gcb dcb userdata = getDhtRunner >>= \ dhtrunner -> liftIO $ do
-  withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
+get h gcb dcb = getDhtRunner >>= \ dhtrunner -> liftIO $ do
+  withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with () $ \ userdataPtr -> do
     dhtInfohashFromHexC hPtr hStrPtr
     gcbCWrapped <- wrapGetCallbackC $ fromGetCallBack gcb
     dcbCWrapped <- wrapDoneCallbackC $ fromDoneCallback dcb
     dhtRunnerGetC (_dhtRunnerPtr dhtrunner) hPtr gcbCWrapped dcbCWrapped userdataPtr
 
 foreign import ccall "dht_runner_put"
-  dhtRunnerPutC :: CDhtRunnerPtr -> CInfoHashPtr -> CValuePtr -> FunPtr (CDoneCallback a) -> Ptr a -> CBool -> IO ()
+  dhtRunnerPutC :: CDhtRunnerPtr -> CInfoHashPtr -> CValuePtr -> FunPtr CDoneCallback -> Ptr () -> CBool -> IO ()
 
 {-| Put a `Value` on the DHT for a given hash.
 -}
-put :: Storable userdata
-    => InfoHash              -- ^ The hash under which to store the value.
-    -> Value                 -- ^ The value to put on the DHT.
-    -> DoneCallback userdata -- ^ The callback to invoke when the request is completed (or has failed).
-    -> userdata              -- ^ User data to pass to the callback.
-    -> Bool                  -- ^ Whether the value should be "permanent". A permanent value is
-                             --   reannounced automatically after it has expired (after 10 minutes). __NOTE__: This requires
-                             --   node to keep running.
+put :: InfoHash     -- ^ The hash under which to store the value.
+    -> Value        -- ^ The value to put on the DHT.
+    -> DoneCallback -- ^ The callback to invoke when the request is completed (or has failed).
+    -> Bool         -- ^ Whether the value should be "permanent". A permanent value is
+                    -- reannounced automatically after it has expired (after 10 minutes). __NOTE__: This requires
+                    -- node to keep running.
     -> DhtRunnerM Dht ()
-put h (InputValue vbs usertype) dcb userdata permanent = ask >>= \ dhtRunnerStateTV -> do
+put h (InputValue vbs usertype) dcb permanent = ask >>= \ dhtRunnerStateTV -> do
   dhtrunner <- getDhtRunner
-  liftIO $ withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
+  liftIO $ withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with () $ \ userdataPtr -> do
     dhtInfohashFromHexC hPtr hStrPtr
     dcbCWrapped <- wrapDoneCallbackC $ fromDoneCallback dcb
     randomVID <- randomIO
@@ -565,7 +549,7 @@ put h (InputValue vbs usertype) dcb userdata permanent = ask >>= \ dhtRunnerStat
       return vPtr'
     unDht $ setValueUserType vPtr usertype
     dhtRunnerPutC (_dhtRunnerPtr dhtrunner) hPtr vPtr dcbCWrapped userdataPtr (fromBool permanent)
-put _ _ _ _ _ = error "DhtRunner.put needs to be fed an InputValue!"
+put _ _ _ _ = error "DhtRunner.put needs to be fed an InputValue!"
 
 foreign import ccall "dht_runner_cancel_put" dhtRunnerCancelPutC :: CDhtRunnerPtr -> CInfoHashPtr -> CULLong -> IO ()
 
@@ -586,7 +570,7 @@ cancelPut h vid = ask >>= \ dhtRunnerStateTV -> do
     dhtRunnerCancelPutC (_dhtRunnerPtr dhtrunner) hPtr (CULLong vid)
 
 foreign import ccall "dht_runner_listen"
-  dhtRunnerListenC :: CDhtRunnerPtr -> CInfoHashPtr -> FunPtr (CValueCallback a) -> FunPtr (CShutdownCallback a) -> Ptr a -> IO (Ptr ())
+  dhtRunnerListenC :: CDhtRunnerPtr -> CInfoHashPtr -> FunPtr CValueCallback -> FunPtr CShutdownCallback -> Ptr () -> IO (Ptr ())
 
 {-| Initiate a Listen operation for a given hash.
 
@@ -597,17 +581,15 @@ foreign import ccall "dht_runner_listen"
    * When `listen` terminates, an `OpToken` is added to the map of tokens (`listenTokens`)
    for the given hash in the `DhtRunnerState`.
 -}
-listen :: Storable userdata
-       => InfoHash                  -- ^ The hash indicating where to listen to.
-       -> ValueCallback userdata    -- ^ The callback to invoke when a value is found or has expired.
-       -> ShutdownCallback userdata -- ^ The callback to invoke before the OpenDHT node shuts down.
-       -> userdata                  -- ^ User data to pass to the callback.
+listen :: InfoHash         -- ^ The hash indicating where to listen to.
+       -> ValueCallback    -- ^ The callback to invoke when a value is found or has expired.
+       -> ShutdownCallback -- ^ The callback to invoke before the OpenDHT node shuts down.
        -> DhtRunnerM Dht OpToken
-listen h vcb scb userdata = ask >>= \ dhtRunnerStateTV -> do
+listen h vcb scb = ask >>= \ dhtRunnerStateTV -> do
   dhtrunner <- getDhtRunner
   tokenTVar <- liftIO $ newTVarIO Nothing
   token <- liftIO $ do
-    withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
+    withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with () $ \ userdataPtr -> do
       dhtInfohashFromHexC hPtr hStrPtr
       vcbCWrapped <- wrapValueCallbackC    $ fromValueCallBack h tokenTVar dhtRunnerStateTV vcb
       scbCWrapped <- wrapShutdownCallbackC $ fromShutdownCallback scb
@@ -639,18 +621,16 @@ cancelListen h t =  do
     dhtRunnerCancelListenC (_dhtRunnerPtr dhtrunner) hPtr (_opTokenPtr t)
     atomically $ modifyTVar dhtRunnerStateTV $ deleteListenToken h t
 
-foreign import ccall "dht_runner_shutdown" dhtRunnerShutdownC :: CDhtRunnerPtr -> FunPtr (CShutdownCallback a) -> Ptr a -> IO ()
+foreign import ccall "dht_runner_shutdown" dhtRunnerShutdownC :: CDhtRunnerPtr -> FunPtr CShutdownCallback -> Ptr () -> IO ()
 
 {-| Gracefuly shutdown the DHT node. This function should be the last function
    called before exiting the context of `DhtRunnerM Dht`.
 -}
-shutdown :: Storable userdata
-         => ShutdownCallback userdata -- ^ The callback to invoke before the OpenDHT node shuts down.
-         -> userdata                  -- ^ User data to pass to the callback.
+shutdown :: ShutdownCallback -- ^ The callback to invoke before the OpenDHT node shuts down.
          -> DhtRunnerM Dht ()
-shutdown scb userdata = do
+shutdown scb = do
   dhtrunner <- getDhtRunner
-  liftIO $ with userdata $ \ userdataPtr -> do
+  liftIO $ with () $ \ userdataPtr -> do
     scbCWrapped <- wrapShutdownCallbackC $ fromShutdownCallback scb
     dhtRunnerShutdownC (_dhtRunnerPtr dhtrunner) scbCWrapped userdataPtr
 

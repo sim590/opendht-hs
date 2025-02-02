@@ -22,17 +22,17 @@ import OpenDHT.Internal.Certificate
 #include <opendht/opendht_c.h>
 #include "DhtRunner.h"
 
-type CGetCallback a = CValuePtr -> Ptr a -> IO CBool
-foreign import ccall safe "wrapper" wrapGetCallbackC :: CGetCallback a-> IO (FunPtr (CGetCallback a))
+type CGetCallback = CValuePtr -> Ptr () -> IO CBool
+foreign import ccall safe "wrapper" wrapGetCallbackC :: CGetCallback -> IO (FunPtr (CGetCallback))
 
-type CValueCallback a = CValuePtr -> CBool -> Ptr a -> IO CBool
-foreign import ccall safe "wrapper" wrapValueCallbackC :: CValueCallback a -> IO (FunPtr (CValueCallback a))
+type CValueCallback = CValuePtr -> CBool -> Ptr () -> IO CBool
+foreign import ccall safe "wrapper" wrapValueCallbackC :: CValueCallback -> IO (FunPtr (CValueCallback))
 
-type CDoneCallback a = CBool -> Ptr a -> IO ()
-foreign import ccall safe "wrapper" wrapDoneCallbackC :: CDoneCallback a-> IO (FunPtr (CDoneCallback a))
+type CDoneCallback = CBool -> Ptr () -> IO ()
+foreign import ccall safe "wrapper" wrapDoneCallbackC :: CDoneCallback -> IO (FunPtr (CDoneCallback))
 
-type CShutdownCallback a = Ptr a -> IO ()
-foreign import ccall safe "wrapper" wrapShutdownCallbackC :: CShutdownCallback a -> IO (FunPtr (CShutdownCallback a))
+type CShutdownCallback = Ptr () -> IO ()
+foreign import ccall safe "wrapper" wrapShutdownCallbackC :: CShutdownCallback -> IO (FunPtr (CShutdownCallback))
 
 -- struct OPENDHT_PUBLIC dht_identity {
 --     dht_privatekey* privatekey;
