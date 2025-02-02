@@ -58,6 +58,7 @@ module OpenDHT.DhtRunner ( -- * The DhtRunnerM monad
                          , OpTokenMap
                          , getNodeIdHash
                          , getPublicKeyID
+                         , getPermanentMetaValues
                          , getListenTokens
                          -- * Initialization
                          , run
@@ -131,6 +132,7 @@ data DhtRunnerState = DhtRunnerState
   { _dhtRunner    :: DhtRunner              -- ^ The DhtRunner.
   , _listenTokens :: OpTokenMap             -- ^ Map tracking the different Listen requests for every calls to `listen`
                                             --   according to their respective hash argument.
+  , _permanentValues :: [Value]             -- ^ List of permanently put values.
   }
 makeLenses ''DhtRunnerState
 
@@ -257,7 +259,7 @@ deleteListenToken :: InfoHash       -- ^ The `InfoHash` where the Listen request
                   -> OpToken        -- ^ The `OpToken` to delete from the Map.
                   -> DhtRunnerState -- ^ The `DhtRunnerState` to change.
                   -> DhtRunnerState
-deleteListenToken h token s@(DhtRunnerState _ ltokens) = maybe s fromNewTokens mSplitAtToken
+deleteListenToken h token s@(DhtRunnerState _ ltokens _) = maybe s fromNewTokens mSplitAtToken
   where
     mSplitAtToken           = withTokenOrNothing ltokens
     fromNewTokens []        = s & listenTokens %~ Map.delete h
@@ -344,6 +346,7 @@ runDhtRunnerM scb userdata mv runnerAction = unDht $ initialize >>= \ dhtrunner 
   let
     initialDhtRunnerState = DhtRunnerState { _dhtRunner       = dhtrunner
                                            , _listenTokens    = Map.empty
+                                           , _permanentValues = []
                                            }
   dhtRunnerStateTV <- liftIO $ newTVarIO initialDhtRunnerState
   runReaderT (unwrapDhtRunnerM (runnerAction >> shutdown scb userdata)) dhtRunnerStateTV
@@ -353,6 +356,7 @@ runDhtRunnerM scb userdata mv runnerAction = unDht $ initialize >>= \ dhtrunner 
 
   let emptyDhtRunnerState = DhtRunnerState { _dhtRunner       = DhtRunner nullPtr
                                            , _listenTokens    = Map.empty
+                                           , _permanentValues = []
                                            }
   finalDhtRunnerState <- liftIO $ atomically $ swapTVar dhtRunnerStateTV emptyDhtRunnerState
   forM_ (Map.toList (finalDhtRunnerState^.listenTokens) ^. traverse . _2) deleteOpToken
@@ -383,6 +387,11 @@ foreign import ccall "wr_dht_runner_get_id" dhtRunnerGetIdC :: CDhtRunnerPtr -> 
 -}
 getPublicKeyID :: DhtRunnerM Dht InfoHash
 getPublicKeyID = infohashFromDhtRunner dhtRunnerGetIdC
+
+{-| Access to the current list of values permanently put.
+-}
+getPermanentMetaValues :: DhtRunnerM Dht [Value]
+getPermanentMetaValues = ask >>= liftIO . readTVarIO <&> _permanentValues
 
 {-| Access to the current listen OpToken map (see `listen` and `cancelListen` for more info).
 -}
@@ -540,17 +549,20 @@ put :: Storable userdata
                              --   reannounced automatically after it has expired (after 10 minutes). __NOTE__: This requires
                              --   node to keep running.
     -> DhtRunnerM Dht ()
-put h (InputValue vbs usertype) dcb userdata permanent = getDhtRunner >>= \ dhtrunner -> liftIO $ do
-  withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
+put h (InputValue vbs usertype) dcb userdata permanent = ask >>= \ dhtRunnerStateTV -> do
+  dhtrunner <- getDhtRunner
+  liftIO $ withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
     dhtInfohashFromHexC hPtr hStrPtr
     dcbCWrapped <- wrapDoneCallbackC $ fromDoneCallback dcb
-    vPtr <- unDht $ valuePtrFromBytes vbs
+    vPtr <- unDht $ do
+      vPtr' <- valuePtrFromBytes vbs
+      metav <- metaValueFromCValuePtr vPtr'
+      when permanent $ liftIO $ atomically $
+        modifyTVar dhtRunnerStateTV $ \ s -> s & permanentValues %~ (metav:)
+      return vPtr'
     unDht $ setValueUserType vPtr usertype
     dhtRunnerPutC (_dhtRunnerPtr dhtrunner) hPtr vPtr dcbCWrapped userdataPtr (fromBool permanent)
 put _ _ _ _ _ = error "DhtRunner.put needs to be fed an InputValue!"
-
-foreign import ccall "dht_runner_listen"
-  dhtRunnerListenC :: CDhtRunnerPtr -> CInfoHashPtr -> FunPtr (CValueCallback a) -> FunPtr (CShutdownCallback a) -> Ptr a -> IO (Ptr ())
 
 foreign import ccall "dht_runner_cancel_put" dhtRunnerCancelPutC :: CDhtRunnerPtr -> CInfoHashPtr -> CULLong -> IO ()
 
@@ -563,10 +575,15 @@ foreign import ccall "dht_runner_cancel_put" dhtRunnerCancelPutC :: CDhtRunnerPt
 cancelPut :: InfoHash -- ^ The hash for which the value was first put.
           -> Word64   -- ^ The value ID.
           -> DhtRunnerM Dht ()
-cancelPut h vid = getDhtRunner >>= \ dhtrunner -> liftIO $ do
-  withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> do
+cancelPut h vid = ask >>= \ dhtRunnerStateTV -> do
+  dhtrunner <- getDhtRunner
+  liftIO $ withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> do
+    atomically $ modifyTVar dhtRunnerStateTV $ \ s -> s & permanentValues %~ filter ((/=vid) . _valueId)
     dhtInfohashFromHexC hPtr hStrPtr
     dhtRunnerCancelPutC (_dhtRunnerPtr dhtrunner) hPtr (CULLong vid)
+
+foreign import ccall "dht_runner_listen"
+  dhtRunnerListenC :: CDhtRunnerPtr -> CInfoHashPtr -> FunPtr (CValueCallback a) -> FunPtr (CShutdownCallback a) -> Ptr a -> IO (Ptr ())
 
 {-| Initiate a Listen operation for a given hash.
 

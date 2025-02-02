@@ -41,6 +41,11 @@ data Value = StoredValue { _valueData        :: BS.ByteString
                          , _valueRecipientId :: InfoHash
                          , _valueUserType    :: String
                          }
+           | MetaValue   { _valueId          :: Word64
+                         , _valueOwner       :: PublicKey
+                         , _valueRecipientId :: InfoHash
+                         , _valueUserType    :: String
+                         }
            | InputValue  { _valueData        :: BS.ByteString
                          , _valueUserType    :: String
                          }
@@ -134,6 +139,12 @@ storedValueFromCValuePtr vPtr = StoredValue <$> getValueData        vPtr
                                             <*> getOwnerPublicKey   vPtr
                                             <*> getValueRecipientId vPtr
                                             <*> getValueUserType    vPtr
+
+metaValueFromCValuePtr :: CValuePtr -> Dht Value
+metaValueFromCValuePtr vPtr = MetaValue <$> getValueId          vPtr
+                                        <*> getOwnerPublicKey   vPtr
+                                        <*> getValueRecipientId vPtr
+                                        <*> getValueUserType    vPtr
 
 --  vim: set sts=2 ts=2 sw=2 tw=120 et :
 
