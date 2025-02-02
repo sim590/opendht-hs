@@ -72,6 +72,7 @@ module OpenDHT.DhtRunner ( -- * The DhtRunnerM monad
                          , cancelListen
                          ) where
 
+import Data.Maybe
 import Data.Default
 import Data.Word
 import Data.Functor
@@ -250,17 +251,48 @@ type DoneCallback a = Bool -- ^ A boolean indicating whether the operation was s
 type ShutdownCallback a = a -- ^ User data passed from the initial call to the function.
                        -> IO ()
 
+{-| Delete the `OpToken` inside the `DhtRunnerState` of DhtRunnerM.
+-}
+deleteListenToken :: InfoHash       -- ^ The `InfoHash` where the Listen request was first made.
+                  -> OpToken        -- ^ The `OpToken` to delete from the Map.
+                  -> DhtRunnerState -- ^ The `DhtRunnerState` to change.
+                  -> DhtRunnerState
+deleteListenToken h token s@(DhtRunnerState _ ltokens) = maybe s newTokens mSplitAtToken
+  where
+    mSplitAtToken           = withTokenOrNothing ltokens
+    newTokens (beg, _:end)  = s & listenTokens %~ Map.insert h (beg++end)
+    newTokens _             = s
+    withTokenOrNothing tmap = do
+      tokens <- tmap ^. at h
+      i      <- List.elemIndex token tokens
+      case splitAt i tokens of
+        (beg, _:end) -> return (beg, end)
+        (_, [])      -> error "cancelListen: the token list should not have been empty."
+
 fromGetCallBack :: Storable t => GetCallback t -> CGetCallback t
 fromGetCallBack gcb vPtr userdataPtr = do
   udata <- peek userdataPtr
   v     <- unDht $ storedValueFromCValuePtr vPtr
   fromBool <$> gcb v udata
 
-fromValueCallBack :: Storable t => ValueCallback t -> CValueCallback t
-fromValueCallBack vcb vPtr expired userdataPtr = do
-  udata <- peek userdataPtr
-  v     <- unDht $ storedValueFromCValuePtr vPtr
-  fromBool <$> vcb v (toBool expired) udata
+fromValueCallBack :: Storable t
+                  => InfoHash              -- ^ The InfoHash for which the Listen request was made.
+                  -> TVar (Maybe OpToken)  -- ^ Shared memory location for the token yielded by the Listen request. This
+                                           --   function should block until the content of the TVar is different than
+                                           --   Nothing.
+                  -> TVar DhtRunnerState   -- ^ Shared memory location for the `DhtRunnerConfig`.
+                  -> ValueCallback t       -- ^ The user's ValueCallback to wrap.
+                  -> CValueCallback t
+fromValueCallBack h tTVar dhtStateTV vcb vPtr expired userdataPtr = do
+  token <- atomically $ do
+    mt <- readTVar tTVar
+    check $ isJust mt
+    return $ fromJust mt
+  udata      <- peek userdataPtr
+  v          <- unDht $ storedValueFromCValuePtr vPtr
+  toContinue <- vcb v (toBool expired) udata
+  unless toContinue $ atomically $ modifyTVar dhtStateTV $ deleteListenToken h token
+  return $ fromBool toContinue
 
 fromDoneCallback :: Storable t => DoneCallback t -> CDoneCallback t
 fromDoneCallback dcb successC userdataPtr = do
@@ -551,19 +583,21 @@ listen :: Storable userdata
        -> ShutdownCallback userdata -- ^ The callback to invoke before the OpenDHT node shuts down.
        -> userdata                  -- ^ User data to pass to the callback.
        -> DhtRunnerM Dht ()
-listen h vcb scb userdata = do
+listen h vcb scb userdata = ask >>= \ dhtRunnerStateTV -> do
   dhtrunner <- getDhtRunner
-  t <- liftIO $ do
+  tokenTVar <- liftIO $ newTVarIO Nothing
+  token <- liftIO $ do
     withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with userdata $ \ userdataPtr -> do
       dhtInfohashFromHexC hPtr hStrPtr
-      vcbCWrapped <- wrapValueCallbackC $ fromValueCallBack vcb
+      vcbCWrapped <- wrapValueCallbackC $ fromValueCallBack h tokenTVar dhtRunnerStateTV vcb
       scbCWrapped <- wrapShutdownCallbackC $ fromShutdownCallback scb
-      OpToken <$> dhtRunnerListenC (_dhtRunnerPtr dhtrunner) hPtr vcbCWrapped scbCWrapped userdataPtr
-  dhtRunnerStateTV <- ask
+      t <- OpToken <$> dhtRunnerListenC (_dhtRunnerPtr dhtrunner) hPtr vcbCWrapped scbCWrapped userdataPtr
+      atomically $ writeTVar tokenTVar (Just t)
+      return t
   liftIO $ atomically $ modifyTVar dhtRunnerStateTV $ \ s ->
     let
       mtokens   = s ^. listenTokens . at h
-      newTokens = maybe [t] (t:) mtokens
+      newTokens = maybe [token] (token:) mtokens
      in s & listenTokens %~ Map.insert h newTokens
 
 foreign import ccall "dht_runner_cancel_listen" dhtRunnerCancelListenC :: CDhtRunnerPtr -> CInfoHashPtr -> COpTokenPtr -> IO ()
@@ -576,26 +610,13 @@ foreign import ccall "dht_runner_cancel_listen" dhtRunnerCancelListenC :: CDhtRu
 cancelListen :: InfoHash -- ^ The hash for which the Listen request was previously issued.
              -> OpToken  -- ^ The token associated identifying the exact Listen operation.
              -> MaybeT (DhtRunnerM Dht) ()
-cancelListen h t = lift getDhtRunner >>= \ dhtrunner -> do
+cancelListen h t =  do
+  dhtrunner <- lift getDhtRunner
+  dhtRunnerStateTV <- ask
   liftIO $ withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> do
     dhtInfohashFromHexC hPtr hStrPtr
     dhtRunnerCancelListenC (_dhtRunnerPtr dhtrunner) hPtr (_opTokenPtr t)
-
-  dhtRunnerStateTV <- ask
-  let
-    withTokenOrNothing tmap = do
-      tokens <- tmap ^. at h
-      i      <- List.elemIndex t tokens
-      case splitAt i tokens of
-        (beg, _:end) -> return (beg, end)
-        (_, [])      -> error "cancelListen: the token list should not have been empty."
-
-  liftIO $ atomically $ modifyTVar dhtRunnerStateTV $ \ s@(DhtRunnerState _ ltokens) ->
-    let
-      mSplitAtToken          = withTokenOrNothing ltokens
-      newTokens (beg, _:end) = s & listenTokens %~ Map.insert h (beg++end)
-      newTokens _            = s
-     in maybe s newTokens mSplitAtToken
+    atomically $ modifyTVar dhtRunnerStateTV $ deleteListenToken h t
 
 foreign import ccall "dht_runner_shutdown" dhtRunnerShutdownC :: CDhtRunnerPtr -> FunPtr (CShutdownCallback a) -> Ptr a -> IO ()
 
