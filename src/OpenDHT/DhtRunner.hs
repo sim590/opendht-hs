@@ -131,10 +131,10 @@ newtype OpToken = OpToken { _opTokenPtr :: COpTokenPtr }
 type OpTokenMap = Map InfoHash [OpToken]
 
 data DhtRunnerState = DhtRunnerState
-  { _dhtRunner    :: DhtRunner              -- ^ The DhtRunner.
-  , _listenTokens :: OpTokenMap             -- ^ Map tracking the different Listen requests for every calls to `listen`
-                                            --   according to their respective hash argument.
-  , _permanentValues :: [Value]             -- ^ List of permanently put values.
+  { _dhtRunner    :: DhtRunner  -- ^ The DhtRunner.
+  , _listenTokens :: OpTokenMap -- ^ Map tracking the different Listen requests for every calls to `listen`
+                                --   according to their respective hash argument.
+  , _permanentValues :: [Value] -- ^ List of permanently put values.
   }
 makeLenses ''DhtRunnerState
 
