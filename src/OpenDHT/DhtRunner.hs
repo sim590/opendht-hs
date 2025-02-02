@@ -352,9 +352,9 @@ runDhtRunnerM scb userdata mv runnerAction = unDht $ initialize >>= \ dhtrunner 
                                            }
   dhtRunnerStateTV <- liftIO $ newTVarIO initialDhtRunnerState
   runReaderT (unwrapDhtRunnerM (runnerAction >> shutdown scb userdata)) dhtRunnerStateTV
+  liftIO $ putMVar mv () -- waiting for shutdown
 
   delete dhtrunner
-  liftIO $ putMVar mv () -- waiting for shutdown
 
   let emptyDhtRunnerState = DhtRunnerState { _dhtRunner       = DhtRunner nullPtr
                                            , _listenTokens    = Map.empty
