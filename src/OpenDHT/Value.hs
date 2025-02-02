@@ -16,20 +16,7 @@
 module OpenDHT.Value ( Value (..)
                      ) where
 
-import qualified Data.ByteString as BS
-
-import OpenDHT.InfoHash
-import OpenDHT.PublicKey
-
-data Value = StoredValue { _valueData        :: BS.ByteString
-                         , _valueId          :: Int
-                         , _valueOwner       :: PublicKey
-                         , _valueRecipientId :: InfoHash
-                         , _valueUserType    :: String
-                         }
-           | InputValue { _valueData        :: BS.ByteString
-                        , _valueUserType    :: String
-                        }
+import OpenDHT.Internal.Value
 
 --  vim: set sts=2 ts=2 sw=2 tw=120 et :
 

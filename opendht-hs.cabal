@@ -13,17 +13,22 @@ extra-doc-files: CHANGELOG.md
 common warnings
     ghc-options: -Wall -Wcompat -Wincomplete-record-updates
                  -Wincomplete-uni-patterns -Wredundant-constraints
+common threading
+    ghc-options: -threaded
 
 library
-    import:             warnings
+    import:             warnings,
+                        threading
     exposed-modules:    OpenDHT
+                        OpenDHT.DhtRunner
                         OpenDHT.Types
                         OpenDHT.InfoHash
-                        OpenDHT.Blob
                         OpenDHT.Value
                         OpenDHT.PublicKey
+                        OpenDHT.PrivateKey
                         OpenDHT.Certificate
-    other-modules:      OpenDHT.Internal.InfoHash
+    other-modules:      OpenDHT.Internal.DhtRunner
+                        OpenDHT.Internal.InfoHash
                         OpenDHT.Internal.Blob
                         OpenDHT.Internal.Value
                         OpenDHT.Internal.PublicKey
@@ -32,16 +37,24 @@ library
                         OpenDHT.Internal.Certificate
     build-depends:      base       ^>= 4.17.2.1,
                         bytestring ^>= 0.11.5,
-                        transformers
+                        transformers,
+                        containers,
+                        stm,
+                        mtl,
+                        lens,
+                        data-default,
+                        random
     build-tool-depends: c2hs:c2hs
     pkgconfig-depends:  opendht-c
     hs-source-dirs:     src
     default-language:   Haskell2010
 
-    c-sources:          src/OpenDHT/Blob.c
+    c-sources:          src/OpenDHT/Internal/DhtRunner.c
+                        src/OpenDHT/Blob.c
                         src/OpenDHT/Internal/Value.c
                         src/OpenDHT/Internal/Certificate.c
                         src/OpenDHT/Internal/PublicKey.c
+    include-dirs:       src/OpenDHT/Internal
 
 --  vim: set sts=4 ts=4 sw=4 tw=120 et :
 

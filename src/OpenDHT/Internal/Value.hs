@@ -10,13 +10,16 @@
 
 module OpenDHT.Internal.Value where
 
+import Data.Maybe
+import Data.Word
 import Data.Functor
 import qualified Data.ByteString as BS
 
 import Control.Monad
+import Control.Monad.Trans.Maybe
 import Control.Monad.IO.Class
 
-import Foreign.Ptr (Ptr)
+import Foreign.Ptr (Ptr, nullPtr)
 import Foreign.C.Types
 import Foreign.C.String
 import Foreign.Storable
@@ -26,18 +29,34 @@ import Foreign.Marshal.Array
 import OpenDHT.Types
 import OpenDHT.Internal.Blob
 import OpenDHT.InfoHash
+import OpenDHT.PublicKey
 import OpenDHT.Internal.InfoHash
 import OpenDHT.Internal.PublicKey
 
 type CValuePtr = Ptr ()
 
-foreign import ccall "dht_value_new" dhtValueNewC :: Ptr CUChar -> CULong -> IO CValuePtr
+data Value = StoredValue { _valueData        :: BS.ByteString
+                         , _valueId          :: Word64
+                         , _valueOwner       :: PublicKey
+                         , _valueRecipientId :: InfoHash
+                         , _valueUserType    :: String
+                         }
+           | MetaValue   { _valueId          :: Word64
+                         , _valueOwner       :: PublicKey
+                         , _valueRecipientId :: InfoHash
+                         , _valueUserType    :: String
+                         }
+           | InputValue  { _valueData        :: BS.ByteString
+                         , _valueUserType    :: String
+                         }
+
+foreign import ccall "dht_value_with_id_new" dhtValueWithIdNewC :: Ptr CUChar -> CULong -> CULong -> IO CValuePtr
 
 {-| Build an OpenDHT Value from a string of bytes.
 -}
-valuePtrFromBytes :: BS.ByteString -> Dht CValuePtr
-valuePtrFromBytes bs = liftIO $ withArray (map CUChar $ BS.unpack bs)
-                           $ \ ptrBytes -> dhtValueNewC ptrBytes (fromIntegral $ BS.length bs)
+valuePtrFromBytes :: BS.ByteString -> Word64 -> Dht CValuePtr
+valuePtrFromBytes bs vid = liftIO $ withArray (map CUChar $ BS.unpack bs)
+                                  $ \ ptrBytes -> dhtValueWithIdNewC ptrBytes (fromIntegral $ BS.length bs) (fromIntegral vid)
 
 foreign import ccall "dht_value_new_from_string" dhtValueNewFromStringC :: Ptr CChar -> IO CValuePtr
 
@@ -71,7 +90,7 @@ foreign import ccall "dht_value_get_id" dhtValueGetIdC :: CValuePtr -> IO CULong
 
 {-| Get the id of an OpenDHT value. This field is a metadata.
 -}
-getValueId :: CValuePtr -> Dht Int
+getValueId :: CValuePtr -> Dht Word64
 getValueId = liftIO . (dhtValueGetIdC >=> return . fromIntegral)
 
 foreign import ccall "dht_value_get_owner" dhtValueGetOwnerC :: CValuePtr -> IO CPublicKeyPtr
@@ -92,6 +111,14 @@ getValueRecipientId vptr = getRecipientHashString <&> InfoHash
           free hPtr
           return hstr
 
+getOwnerPublicKey :: CValuePtr -> Dht PublicKey
+getOwnerPublicKey vptr = do
+  opkPtr <- getValueOwner vptr
+  mStr <- runMaybeT $ do
+    guard (opkPtr /= nullPtr)
+    export (CPublicKey opkPtr)
+  return $ ExportedKey $ fromMaybe "" mStr
+
 foreign import ccall "dht_value_get_user_type" dhtValueGetUserTypeC  :: CValuePtr -> IO (Ptr CChar)
 
 {-| Get the user-type of an OpenDHT value. This field is a metadata.
@@ -105,6 +132,19 @@ foreign import ccall "dht_value_set_user_type" dhtValueSetUserTypeC  :: CValuePt
 -}
 setValueUserType :: CValuePtr -> String -> Dht ()
 setValueUserType vptr s = liftIO $ withCString s $ \ cstr -> dhtValueSetUserTypeC vptr cstr
+
+storedValueFromCValuePtr :: CValuePtr -> Dht Value
+storedValueFromCValuePtr vPtr = StoredValue <$> getValueData        vPtr
+                                            <*> getValueId          vPtr
+                                            <*> getOwnerPublicKey   vPtr
+                                            <*> getValueRecipientId vPtr
+                                            <*> getValueUserType    vPtr
+
+metaValueFromCValuePtr :: CValuePtr -> Dht Value
+metaValueFromCValuePtr vPtr = MetaValue <$> getValueId          vPtr
+                                        <*> getOwnerPublicKey   vPtr
+                                        <*> getValueRecipientId vPtr
+                                        <*> getValueUserType    vPtr
 
 --  vim: set sts=2 ts=2 sw=2 tw=120 et :
 

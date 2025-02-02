@@ -35,11 +35,12 @@ data DataView = DataView { _data      :: Ptr CUChar
                          }
 
 instance Storable DataView where
-    sizeOf _    = {# sizeof  dht_data_view #}
-    alignment _ = {# alignof dht_data_view #}
-    poke        = poke
-    peek p      = DataView <$> {# get dht_data_view->data #} p
-                           <*> {# get dht_data_view->size #} p
+    sizeOf _              = {# sizeof  dht_data_view #}
+    alignment _           = {# alignof dht_data_view #}
+    poke p (DataView d s) = {# set dht_data_view->data #} p d
+                         >> {# set dht_data_view->size #} p s
+    peek p                = DataView <$> {# get dht_data_view->data #} p
+                                     <*> {# get dht_data_view->size #} p
 
 bytesFromDataView :: DataView -> IO BS.ByteString
 bytesFromDataView dv = do

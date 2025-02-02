@@ -28,8 +28,8 @@ type CCertificatePtr = Ptr ()
 
 foreign import ccall "dht_certificate_import" dhtCertificateImportC :: Ptr CUChar -> CUInt -> IO CCertificatePtr
 
-certificatePtrFromBytes :: BS.ByteString -> Dht CCertificate
-certificatePtrFromBytes bs = liftIO $ withArray (map CUChar $ BS.unpack bs)
+fromBytes :: BS.ByteString -> Dht CCertificate
+fromBytes bs = liftIO $ withArray (map CUChar $ BS.unpack bs)
                                     $ \ ptrBytes -> dhtCertificateImportC ptrBytes (fromIntegral $ BS.length bs) <&> CCertificate
 
 foreign import ccall "wr_dht_certificate_get_id" dhtCertificateGetIdC :: CCertificatePtr -> CInfoHashPtr -> IO ()
@@ -55,8 +55,8 @@ publicKeyFromCertificate (CCertificate cPtr) = liftIO (dhtCertificateGetPublicke
 
 foreign import ccall "dht_certificate_delete" dhtCertificateDeleteC :: CCertificatePtr -> IO ()
 
-deleteCertificate :: CCertificate -> Dht ()
-deleteCertificate (CCertificate cPtr) = liftIO $ dhtCertificateDeleteC cPtr
+delete :: CCertificate -> Dht ()
+delete (CCertificate cPtr) = liftIO $ dhtCertificateDeleteC cPtr
 
 --  vim: set sts=2 ts=2 sw=2 tw=120 et :
 

@@ -61,7 +61,7 @@ foreign import ccall "dht_infohash_print" dhtInfoHashPrintC :: CInfoHashPtr -> I
 
    would yield the following string:
 
-   > "fae0f12f4f2f5eaaadceff21987ff1f121ff478f"
+   > fae0f12f4f2f5eaaadceff21987ff1f121ff478f
 -}
 infoHashToString :: CInfoHashPtr -> IO String
 infoHashToString h = dhtInfoHashPrintC h >>= peekCString
