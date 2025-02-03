@@ -11,6 +11,7 @@ license:         GPL-3.0-or-later
 license-file:    LICENSE
 author:          Simon Désaulniers
 maintainer:      sim.desaulniers@gmail.com
+bug-reports:     https://github.com/sim590/opendht-hs/issues
 category:        Network
 build-type:      Simple
 extra-doc-files: CHANGELOG.md
