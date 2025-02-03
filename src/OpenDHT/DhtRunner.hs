@@ -215,7 +215,7 @@ instance Default DhtRunnerConfig where
                         }
 
 {-| This type wraps all function calls to OpenDHT. It is a transformer wrapping
-   `StateT` and some other monad (usually `Dht`).
+   `ReaderT` and some other monad (usually `Dht`).
 
    This type should be used in conjunction with `runDhtRunnerM`.
 -}
