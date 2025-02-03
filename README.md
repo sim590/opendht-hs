@@ -55,16 +55,14 @@ valueCb (StoredValue d i (ExportedKey o) rId utype) expired = liftIO cb >> retur
       putStrLn $ ">> recipient id: " <> show rId
       putStrLn $ ">> user type: "    <> show utype
 
-shutdownCb :: MVar () -> IO ()
-shutdownCb mv = do
+shutdownCb :: IO ()
+shutdownCb = do
   putStrLn "Shutting down!"
-  takeMVar mv
 
 main :: IO ()
 main = do
   mv         <- newEmptyMVar
-  shutdownMV <- newMVar ()
-  runDhtRunnerM (shutdownCb shutdownMV) shutdownMV $ do
+  runDhtRunnerM shutdownCb $ do
     DhtRunner.run 0
     DhtRunner.bootstrap "bootstrap.ring.cx" "4222"
 

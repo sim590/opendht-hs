@@ -328,18 +328,18 @@ deleteOpToken = liftIO . dhtOpTokenDeleteC . _opTokenPtr
    application.
 -}
 runDhtRunnerM :: ShutdownCallback  -- ^ A callback to run before shutting down the DHT node.
-              -> MVar ()           -- ^ Synchronizing variable used to block while waiting on the
-                                   --   `ShutdownCallback` to terminate.
               -> DhtRunnerM Dht () -- ^ The `DhtRunnerM` action.
               -> IO ()
-runDhtRunnerM scb mv runnerAction = unDht $ initialize >>= \ dhtrunner -> do
+runDhtRunnerM scb runnerAction = unDht $ initialize >>= \ dhtrunner -> do
+  mv <- liftIO $ newMVar ()
   let
     initialDhtRunnerState = DhtRunnerState { _dhtRunner       = dhtrunner
                                            , _listenTokens    = Map.empty
                                            , _permanentValues = []
                                            }
+    scbWrapped            = scb >> takeMVar mv
   dhtRunnerStateTV <- liftIO $ newTVarIO initialDhtRunnerState
-  runReaderT (unwrapDhtRunnerM (runnerAction >> shutdown scb)) dhtRunnerStateTV
+  runReaderT (unwrapDhtRunnerM (runnerAction >> shutdown scbWrapped)) dhtRunnerStateTV
   liftIO $ putMVar mv () -- waiting for shutdown
 
   delete dhtrunner
