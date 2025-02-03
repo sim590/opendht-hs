@@ -10,6 +10,10 @@ category:        Network
 build-type:      Simple
 extra-doc-files: CHANGELOG.md
 
+source-repository head
+  type: git
+  location: https://github.com/sim590/opendht-hs
+
 common warnings
     ghc-options: -Wall -Wcompat -Wincomplete-record-updates
                  -Wincomplete-uni-patterns -Wredundant-constraints
