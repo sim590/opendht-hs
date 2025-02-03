@@ -2,6 +2,11 @@ cabal-version:   3.0
 name:            opendht-hs
 version:         0.1.0.0
 synopsis:        Haskell bindings for OpenDHT
+description:     Haskell bindings for [OpenDHT](https://github.com/savoirfairelinux/opendht) (based
+                 on opendht-c, the C bindings for OpenDHT) exposing only pure Haskell data types.
+
+                 This library defines a monad taking care of all pointers used to interact with
+                 opendht-c.
 license:         GPL-3.0-or-later
 license-file:    LICENSE
 author:          Simon Désaulniers
