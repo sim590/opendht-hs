@@ -83,6 +83,22 @@ main = do
     liftIO $ takeMVar mv
 ```
 
+This would yield the following text on `stdout`:
+
+```
+Putting value "my data"
+Success!
+Getting back the value...
+Value received!
+>> data: my data
+>> value id: 11921635044826781238
+>> value owner: none
+>> recipient id: 0000000000000000000000000000000000000000
+>> user type: "mytype"
+Success!
+Shutting down!
+```
+
 ### Using opendht-hs
 
 Make sure to pass `-threaded` to GHC because this library makes use of
