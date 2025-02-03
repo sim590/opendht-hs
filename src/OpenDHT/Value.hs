@@ -7,9 +7,9 @@
 
   Maintainer  : sim.desaulniers@gmail.com
 
-  This exposes different functions to manipulate an OpenDHT `Value`. This
-  datatype encapsulates data either retrieved from or put on the network through
-  `DhtRunner` functions.
+  This exposes bindings for an OpenDHT `Value`. This
+  datatype encapsulates data either retrieved from or put on
+  the network through `DhtRunner` functions.
 -}
 
 
