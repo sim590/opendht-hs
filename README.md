@@ -10,7 +10,7 @@ opendht-c.
 
 ### Example
 
-```haskell
+```hs
 module Main where
 
 import qualified Data.ByteString as BS
