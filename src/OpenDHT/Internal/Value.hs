@@ -38,7 +38,7 @@ type CValuePtr = Ptr ()
 
 data Value = StoredValue { _valueData        :: BS.ByteString -- ^ The data to store onto the DHT.
                          , _valueId          :: Word64        -- ^ The unique identifier of the value taken randomly
-                                                              --   from the space bits \(\{0,1\}^{64}\).
+                                                              --   from the bits space \(\{0,1\}^{64}\).
                          , _valueOwner       :: PublicKey     -- ^ The owner's public key. If the data was signed, this
                                                               --   field should contain the exported key.
                          , _valueRecipientId :: InfoHash      -- ^ The hash of the public key to which the value is
