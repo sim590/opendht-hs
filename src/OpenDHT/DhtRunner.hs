@@ -8,14 +8,21 @@
   Maintainer  : sim.desaulniers@gmail.com
 
   This encapsulates functions and data types for manipulating an OpenDHT node. In
-  OpenDHT, a node is used through the class @DhtRunner@. This module exposes this
-  class' functions.
+  OpenDHT, a node is used through the C++ class @DhtRunner@. This module gives
+  all required bindings for using a DHT node.
+
+  For reference, the user should also take a look at the C++ API documentation
+  by OpenDHT authors:
+
+  * https://github.com/savoirfairelinux/opendht/wiki/API-Overview
+  * https://github.com/savoirfairelinux/opendht/wiki/Running-a-node-in-your-program
 -}
 
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module OpenDHT.DhtRunner ( -- * The DhtRunnerM monad
+module OpenDHT.DhtRunner (
+                         -- * The DhtRunnerM monad
                            DhtRunner
                          , DhtRunnerM
                          , runDhtRunnerM
@@ -325,7 +332,9 @@ deleteOpToken = liftIO . dhtOpTokenDeleteC . _opTokenPtr
    for waiting on the underlying node's callback invocation before letting this
    function terminate. In general, the programmer should not let this function
    terminate while DHT operations are still susceptible to occur for the
-   application.
+   application. However, before this function terminates, the node should have
+   been gracefully shutdown by calling it's @shutdown@ method. This will
+   therefore call the user's shutdown callback.
 -}
 runDhtRunnerM :: ShutdownCallback  -- ^ A callback to run before shutting down the DHT node.
               -> DhtRunnerM Dht () -- ^ The `DhtRunnerM` action.
@@ -498,6 +507,8 @@ isRunning = getDhtRunner >>= liftIO . (toBool <$>) . dhtRunnerIsRunningC . _dhtR
 foreign import ccall "dht_runner_bootstrap" dhtRunnerBootstrapC :: CDhtRunnerPtr -> Ptr CChar -> Ptr CChar -> IO ()
 
 {-| Connect to the OpenDHT network before doing any operation.
+
+  Note that when `_proxyServer` is enabled, this has no effect.
 -}
 bootstrap :: String -- ^ The hostname (or IP address) used to bootstrap the connection to the network.
           -> String -- ^ The remote bootstrapping node port to use to connect.
@@ -527,17 +538,15 @@ foreign import ccall "dht_runner_put"
   dhtRunnerPutC :: CDhtRunnerPtr -> CInfoHashPtr -> CValuePtr -> FunPtr CDoneCallback -> Ptr () -> CBool -> IO ()
 
 {-| Put a `Value` on the DHT for a given hash.
-
-   The ID of the value that was put on the network. This serves to cancel a
-   permanent put later on (see `cancelPut`).
 -}
-put :: InfoHash     -- ^ The hash under which to store the value.
-    -> Value        -- ^ The value to put on the DHT.
-    -> DoneCallback -- ^ The callback to invoke when the request is completed (or has failed).
-    -> Bool         -- ^ Whether the value should be "permanent". A permanent value is
-                    --   reannounced automatically after it has expired (after 10 minutes).
-                    --   __NOTE__: This requires node to keep running.
-    -> DhtRunnerM Dht Word64
+put :: InfoHash              -- ^ The hash under which to store the value.
+    -> Value                 -- ^ The value to put on the DHT.
+    -> DoneCallback          -- ^ The callback to invoke when the request is completed (or has failed).
+    -> Bool                  -- ^ Whether the value should be "permanent". A permanent value is
+                             -- reannounced automatically after it has expired (after 10 minutes).
+                             -- __NOTE__: This requires node to keep running.
+    -> DhtRunnerM Dht Word64 -- ^ The ID of the value that was put on the
+                             -- network. This serves to cancel a permanent put later on (see `cancelPut`).
 put h (InputValue vbs usertype) dcb permanent = ask >>= \ dhtRunnerStateTV -> do
   dhtrunner <- getDhtRunner
   liftIO $ withCString (show h) $ \ hStrPtr -> withCInfohash $ \ hPtr -> with () $ \ userdataPtr -> do
@@ -585,10 +594,10 @@ foreign import ccall "dht_runner_listen"
    * When `listen` terminates, an `OpToken` is added to the map of tokens (@listenTokens@)
    for the given hash in the state of `DhtRunnerM`.
 -}
-listen :: InfoHash         -- ^ The hash indicating where to listen to.
-       -> ValueCallback    -- ^ The callback to invoke when a value is found or has expired.
-       -> ShutdownCallback -- ^ The callback to invoke before the OpenDHT node shuts down.
-       -> DhtRunnerM Dht OpToken
+listen :: InfoHash               -- ^ The hash indicating where to listen to.
+       -> ValueCallback          -- ^ The callback to invoke when a value is found or has expired.
+       -> ShutdownCallback       -- ^ The callback to invoke before the OpenDHT node shuts down.
+       -> DhtRunnerM Dht OpToken -- ^ The token identifying the Listen request.
 listen h vcb scb = ask >>= \ dhtRunnerStateTV -> do
   dhtrunner <- getDhtRunner
   tokenTVar <- liftIO $ newTVarIO Nothing
