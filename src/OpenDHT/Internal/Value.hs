@@ -35,19 +35,24 @@ import OpenDHT.Internal.PublicKey
 
 type CValuePtr = Ptr ()
 
-data Value = StoredValue { _valueData        :: BS.ByteString
-                         , _valueId          :: Word64
-                         , _valueOwner       :: PublicKey
-                         , _valueRecipientId :: InfoHash
-                         , _valueUserType    :: String
+
+data Value = StoredValue { _valueData        :: BS.ByteString -- ^ The data to store onto the DHT.
+                         , _valueId          :: Word64        -- ^ The unique identifier of the value taken randomly
+                                                              --   from the space bits \(\{0,1\}^{64}\).
+                         , _valueOwner       :: PublicKey     -- ^ The owner's public key. If the data was signed, this
+                                                              --   field should contain the exported key.
+                         , _valueRecipientId :: InfoHash      -- ^ The hash of the public key to which the value is
+                                                              --   dedicated when the value is encrypted. Otherwise,
+                                                              --   it's the empty InfoHash.
+                         , _valueUserType    :: String        -- ^ A user defined field for labelling values.
                          }
-           | MetaValue   { _valueId          :: Word64
-                         , _valueOwner       :: PublicKey
-                         , _valueRecipientId :: InfoHash
-                         , _valueUserType    :: String
+           | MetaValue   { _valueId          :: Word64        -- ^
+                         , _valueOwner       :: PublicKey     -- ^
+                         , _valueRecipientId :: InfoHash      -- ^
+                         , _valueUserType    :: String        -- ^
                          }
-           | InputValue  { _valueData        :: BS.ByteString
-                         , _valueUserType    :: String
+           | InputValue  { _valueData        :: BS.ByteString -- ^
+                         , _valueUserType    :: String        -- ^
                          }
 
 foreign import ccall "dht_value_with_id_new" dhtValueWithIdNewC :: Ptr CUChar -> CULong -> CULong -> IO CValuePtr
