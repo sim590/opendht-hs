@@ -12,7 +12,9 @@ permissions:
 jobs:
   build:
 
-    runs-on: ghcr.io/sim590/opendht-hs-ci
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/sim590/opendht-hs-ci
     steps:
     - uses: actions/checkout@v4
     - uses: haskell-actions/setup@v2
