@@ -15,8 +15,9 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/sim590/opendht-hs-ci
-      username: sim590
-      password: ${{ secrets.DOCKER_CONTAINER_REGISTRY_TOKEN }}
+      cerdentials:
+        username: sim590
+        password: ${{ secrets.DOCKER_CONTAINER_REGISTRY_TOKEN }}
     steps:
     - uses: actions/checkout@v4
     - uses: haskell-actions/setup@v2
