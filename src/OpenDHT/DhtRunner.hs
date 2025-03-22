@@ -553,14 +553,12 @@ put h (InputValue vbs usertype) dcb permanent = ask >>= \ dhtRunnerStateTV -> do
     dhtInfohashFromHexC hPtr hStrPtr
     dcbCWrapped <- wrapDoneCallbackC $ fromDoneCallback dcb
     randomVID <- randomIO
-    vPtr <- unDht $ do
-      vPtr' <- valuePtrFromBytes vbs randomVID
-      metav <- metaValueFromCValuePtr vPtr'
+    unDht $ withValuePtrFromBytes vbs randomVID $ \ vPtr -> do
+      metav <- metaValueFromCValuePtr vPtr
       when permanent $ liftIO $ atomically $
         modifyTVar dhtRunnerStateTV $ \ s -> s & permanentValues %~ (metav:)
-      return vPtr'
-    unDht $ setValueUserType vPtr usertype
-    dhtRunnerPutC (_dhtRunnerPtr dhtrunner) hPtr vPtr dcbCWrapped userdataPtr (fromBool permanent)
+      setValueUserType vPtr usertype
+      liftIO $ dhtRunnerPutC (_dhtRunnerPtr dhtrunner) hPtr vPtr dcbCWrapped userdataPtr (fromBool permanent)
     return randomVID
 put _ _ _ _ = error "DhtRunner.put needs to be fed an InputValue!"
 

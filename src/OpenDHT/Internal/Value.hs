@@ -56,12 +56,15 @@ data Value = StoredValue { _valueData        :: BS.ByteString -- ^ The data to s
                          }
 
 foreign import ccall "dht_value_with_id_new" dhtValueWithIdNewC :: Ptr CUChar -> CULong -> CULong -> IO CValuePtr
+foreign import ccall "dht_value_unref" dhtValueUnref            :: CValuePtr -> IO ()
 
 {-| Build an OpenDHT Value from a string of bytes.
 -}
-valuePtrFromBytes :: BS.ByteString -> Word64 -> Dht CValuePtr
-valuePtrFromBytes bs vid = liftIO $ withArray (map CUChar $ BS.unpack bs)
-                                  $ \ ptrBytes -> dhtValueWithIdNewC ptrBytes (fromIntegral $ BS.length bs) (fromIntegral vid)
+withValuePtrFromBytes :: BS.ByteString -> Word64 -> (CValuePtr -> Dht ()) -> Dht ()
+withValuePtrFromBytes bs vid f = liftIO $ withArray (map CUChar $ BS.unpack bs) $ \ ptrBytes -> do
+  vPtr <- dhtValueWithIdNewC ptrBytes (fromIntegral $ BS.length bs) (fromIntegral vid)
+  unDht $ f vPtr
+  dhtValueUnref vPtr
 
 foreign import ccall "dht_value_new_from_string" dhtValueNewFromStringC :: Ptr CChar -> IO CValuePtr
 
