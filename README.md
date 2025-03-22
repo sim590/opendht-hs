@@ -3,7 +3,7 @@
 
 Haskell bindings for [OpenDHT](https://github.com/savoirfairelinux/opendht)
 (based on opendht-c, the C bindings for OpenDHT) exposing only pure Haskell data
-types.
+tnypes.
 
 This library defines a monad taking care of all pointers used to interact with
 opendht-c.
@@ -104,7 +104,11 @@ threading.
 
 ### Dependencies
 
-OpenDHT's C bindings.
+* For building only:
+  * ghc `>=9.4.8`
+  * cabal `>=3.12.1.0`
+  * c2hs (tested on `0.28.8`)
+* OpenDHT's C bindings `>=3.3.0`.
 
 ### Author(s)
 
