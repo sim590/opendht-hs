@@ -1,0 +1,6 @@
+
+packages: .
+
+package opendht-hs
+  c2hs-options: -C -std=gnu18
+
