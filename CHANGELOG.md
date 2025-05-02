@@ -1,5 +1,12 @@
 # Revision history for opendht-hs
 
+## 0.1.1.0 -- 2025-05-01
+
+* going around an incompatibility issue around c2hs and GCC 15 (#5)
+* enabling manual run for haskell-ci github action (#4)
+* bootstrapped the CHANGELOG file (#3)
+* fixed a memory leak (#2)
+
 ## 0.1.0.0 -- 2025-03-22
 
 * Initial `DhtRunner` implementation:
