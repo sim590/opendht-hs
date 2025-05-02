@@ -1,5 +1,9 @@
 # Revision history for opendht-hs
 
+## 0.1.1.1 -- 2025-05-01
+
+* updating the cabal version number in cabal file (was forgotten in 0.1.1.0)
+
 ## 0.1.1.0 -- 2025-05-01
 
 * going around an incompatibility issue around c2hs and GCC 15 (#5)
